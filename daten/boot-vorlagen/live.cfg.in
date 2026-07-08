@@ -1,0 +1,31 @@
+label live
+	menu label ${DISTRO} (Standard)
+    kernel /live/vmlinuz
+    append initrd=/live/initrd.img boot=live ${ifnames_opt} ${netconfig_opt} username={LIVEUSER} locales={LOCALE} keyboard-layouts={KEYBOARD} timezone={TIMEZONE}
+
+label lang
+	menu label ${DISTRO} - English (US)
+    kernel /live/vmlinuz
+    append initrd=/live/initrd.img boot=live ${ifnames_opt} ${netconfig_opt} username={LIVEUSER} locales=en_US.UTF-8 keyboard-layouts=us
+
+label toram
+	menu label ${DISTRO} (in den RAM laden / load to RAM)
+    kernel /live/vmlinuz
+    append initrd=/live/initrd.img boot=live toram ${ifnames_opt} ${netconfig_opt} username={LIVEUSER} locales={LOCALE} keyboard-layouts={KEYBOARD} timezone={TIMEZONE}
+
+label failsafe
+	menu label ${DISTRO} (failsafe/Notmodus)
+    kernel /live/vmlinuz noapic noapm nodma nomce nolapic nosmp forcepae nomodeset vga=normal ${ifnames_opt} ${netconfig_opt} username={LIVEUSER}
+    append initrd=/live/initrd.img boot=live
+
+label memtest
+	menu label Speichertest (Memory test)
+    kernel /live/memtest
+
+label chain.c32 hd0,0
+	menu label Festplatte starten (Boot hard disk)
+	chain.c32 hd0,0
+
+label harddisk
+	menu label Festplatte starten (alter Weg)
+	localboot 0x80

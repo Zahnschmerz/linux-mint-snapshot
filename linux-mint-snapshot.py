@@ -1,0 +1,1226 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#
+# Linux Mint Snapshot (v5.0) — 1:1 clone of the running system as a bootable live ISO.
+# Published by / Herausgeber: Gilbert Rikus — License: GPL-3.0-or-later
+#
+# v5 = the "clone model" (Gilbert's product decision, 2026-07-07, MX-Snapshot-like):
+#   * The snapshot is a 1:1 CLONE: account, settings and saved logins ALWAYS included.
+#     Big folders (Documents, Pictures, VMs ...) can be left out via checkboxes.
+#   * The live stick boots STRAIGHT into the owner's own session (real user, autologin),
+#     not into an artificial "mint" user.
+#   * The installer (Calamares) does a 1:1 clone install: no user-creation page,
+#     no locale/keyboard pages — it only prepares the target disk and the bootloader.
+#   * The app itself lives in /opt/linux-mint-snapshot (installed by the assistant),
+#     so it is part of every clone — like mx-snapshot on MX Linux.
+#   * Everything else proven in v4 stays: language table DE/EN, dynamic distro/user
+#     values, sudo -n/pkexec, first-start assistant, crash-safe build engine.
+#   * Self test: MINT_SNAP_TEST=1 ./linux-mint-snapshot.py --selbsttest
+
+import os
+import re
+import sys
+import glob
+import json
+import getpass
+import shutil
+import subprocess
+import threading
+import datetime
+
+import gi
+gi.require_version('Gtk', '3.0')
+from gi.repository import Gtk, GLib, Pango, GdkPixbuf
+
+VERSION = "5.0"
+APP_ORDNER = os.path.dirname(os.path.abspath(__file__))
+SYSTEM_ORDNER = '/opt/linux-mint-snapshot'
+DATEN = os.path.join(APP_ORDNER, 'daten')
+KONFIG_ORDNER = os.path.expanduser('~/.config/linux-mint-snapshot')
+LOG_DATEI = os.path.join(KONFIG_ORDNER, 'letzter-lauf.log')
+PID_DATEI = os.path.join(KONFIG_ORDNER, 'lauf.pid')
+EINRICHT_LOG = os.path.join(KONFIG_ORDNER, 'einrichtung.log')
+WEGLASSEN_DATEI = os.path.join(KONFIG_ORDNER, 'weglassen.json')
+ISO_ORDNER = '/home/snapshot'
+REFRACTA_DEB_URL = ('https://master.dl.sourceforge.net/project/refracta/tools/'
+                    'refractasnapshot-base_10.2.12_all.deb?viasf=1')
+CALA_MARKER = 'lms-config-v5'
+PROZENT_MUSTER = re.compile(r'(\d{1,3})%')
+SCHRITT_MUSTER = re.compile(r'(?:Schritt|Step) (\d)')
+
+FAKE_MOTOR = (
+    "echo 'Selbsttest: pruefe Voraussetzungen'; sleep 1; "
+    "echo 'mksquashfs startet'; "
+    "for p in 5 25 50 75 95; do echo \"[==    ] 100/2000 ${p}%\"; sleep 1; done; "
+    "echo 'Creating CD/DVD image file...'; sleep 1; "
+    "touch \"$MINT_SNAP_TESTORDNER/selbsttest.iso\"; "
+    "echo 'All finished!'"
+)
+
+# ======================= Sprache =======================
+
+def _systemsprache():
+    lang = (os.environ.get('LC_ALL') or os.environ.get('LC_MESSAGES')
+            or os.environ.get('LANG') or 'en')
+    return 'de' if lang.lower().startswith('de') else 'en'
+
+SPRACHE = _systemsprache()
+
+SPRACHNAMEN = {  # Anzeigename fuers Boot-Menue (Muttersprache des Nutzers)
+    'de': 'Deutsch', 'en': 'English', 'fr': 'Français', 'es': 'Español',
+    'it': 'Italiano', 'pt': 'Português', 'nl': 'Nederlands', 'pl': 'Polski',
+    'cs': 'Čeština', 'hu': 'Magyar', 'sv': 'Svenska', 'da': 'Dansk',
+    'fi': 'Suomi', 'nb': 'Norsk', 'tr': 'Türkçe', 'ru': 'Русский',
+    'uk': 'Українська', 'el': 'Ελληνικά', 'ro': 'Română', 'bg': 'Български',
+}
+
+T_ALLE = {
+ 'de': {
+  'untertitel': "1:1-Klon deines Linux-Mint-Systems als startfähige ISO — mit einem Klick",
+  'herausgeber': "Herausgeber: Gilbert Rikus · GPL-3 · v{v}",
+  'knopf_ueber': "ℹ️ Über",
+  'frame_auswahl': " Was kommt in den Schnappschuss? ",
+  'klon_info': ("Der Schnappschuss ist ein 1:1-Klon: dein Konto, deine Einstellungen und\n"
+                "gespeicherten Anmeldungen sind immer dabei — alles funktioniert wie gewohnt."),
+  'weglassen_titel': "Große Ordner weglassen? (Häkchen = bleibt draußen, ISO wird kleiner)",
+  'privat_hinweis': ("🔒 Der Stick enthält dein Konto und deine Zugänge —\n"
+                     "sicher verwahren und nicht an Fremde weitergeben."),
+  'groesse_offen': "wird gemessen …",
+  'anzeige_vms': "Virtuelle Maschinen (VMs)",
+  'anzeige_steam': "Steam-Spiele",
+  'anzeige_flatpak': "Flatpak-Programmdaten",
+  'knopf_bauen': "  📸  Schnappschuss jetzt erstellen  ",
+  'knopf_abbruch': "✋ Abbrechen",
+  'bereit': "Bereit — klicke auf »Schnappschuss jetzt erstellen«.",
+  'bereit_kurz': "Bereit.",
+  'konfig_fehlt': "Konfiguration fehlt",
+  'schritt1': "Schritt 1 von 3: Prüfe Voraussetzungen und kopiere das System … (dauert am längsten)",
+  'schritt2': "Schritt 2 von 3: Komprimiere das System …",
+  'schritt3': "Schritt 3 von 3: Baue die startfähige ISO …",
+  'fertig_phase': "✅ Fertig: {iso}",
+  'fertig_titel': "✅ Schnappschuss fertig!",
+  'fertig_text': ("{iso}\nGröße: {groesse}  →  der USB-Stick muss mindestens so groß sein.\n\n"
+                  "Nächster Schritt: unten auswählen und »Auf USB-Stick schreiben« klicken.\n\n"
+                  "Gut zu wissen: Der Stick startet direkt in deine gewohnte Umgebung\n"
+                  "(Benutzer »{liveuser}«). Zum Installieren liegt das Symbol\n"
+                  "»System installieren« auf dem Schreibtisch — die Installation\n"
+                  "übernimmt alles 1:1, auch dein Konto.\n\n"
+                  "🔒 Der Stick enthält deine Zugänge — sicher verwahren!"),
+  'kein_abbild_phase': "❌ Es ist keine neue ISO entstanden.",
+  'kein_abbild_titel': "Kein Abbild entstanden",
+  'kein_abbild_text': ("Der Lauf endete ohne neue ISO.\n"
+                       "Ein Blick in »Technische Einzelheiten« zeigt den Grund."),
+  'abbruch_titel': "Bau wirklich abbrechen?",
+  'abbruch_text': "Die halbfertigen Arbeitsdateien werden aufgeräumt.",
+  'abgebrochen': "Abgebrochen — Arbeitsdateien aufgeräumt.",
+  'lauf_gefunden': "Laufender Bau gefunden — Anzeige wieder angekoppelt …",
+  'details': "Technische Einzelheiten (nur für den Notfall)",
+  'frame_liste': " Fertige Abbilder ",
+  'spalte_datei': "Datei", 'spalte_groesse': "Größe", 'spalte_erstellt': "Erstellt",
+  'knopf_stick': "🖊️ Auf USB-Stick schreiben",
+  'knopf_pruef': "🔍 Stick kontrollieren (Prüfsumme)",
+  'knopf_loesch': "🗑️ Löschen",
+  'ablage': "Ablageort: <b>{ordner}</b>   ·   Freier Platz: <b>{platz}</b>",
+  'erst_auswaehlen_titel': "Bitte erst auswählen",
+  'auswahl_schreiben': "Wähle in der Liste die ISO aus, die auf den Stick soll.",
+  'auswahl_pruefen': "Wähle in der Liste die ISO aus, mit der der Stick verglichen werden soll.",
+  'auswahl_loeschen': "Wähle in der Liste die ISO aus, die gelöscht werden soll.",
+  'pruef_laeuft': "🔍 Kontrolliere den Stick — dauert einige Minuten, bitte warten …",
+  'kein_stick_titel': "Kein USB-Stick gefunden",
+  'kein_stick_text': "Bitte den Stick einstecken und erneut kontrollieren.",
+  'stick_ok_titel': "✅ Stick ist PERFEKT",
+  'stick_ok_text': ("Der Stick {geraet} stimmt bit-genau mit\n{iso} überein.\n\n"
+                    "So benutzt du den Stick:\n"
+                    "1. Rechner neu starten und das Boot-Menü öffnen\n"
+                    "    (meist F12 — je nach Gerät auch F2, F8 oder Esc)\n"
+                    "2. Den USB-Stick auswählen\n"
+                    "3. Im Startmenü den ersten Eintrag wählen\n"
+                    "4. Das System startet direkt in deine gewohnte Umgebung\n"
+                    "5. Zum Installieren: Doppelklick auf »System installieren«\n"
+                    "    direkt auf dem Schreibtisch — es wird 1:1 übernommen"),
+  'stick_falsch_titel': "❌ Stick weicht ab!",
+  'stick_falsch_text': ("Der Stick {geraet} stimmt NICHT mit der ISO überein.\n"
+                        "Bitte neu schreiben oder anderen Stick nehmen."),
+  'pruef_fehler': "Kontrolle fehlgeschlagen",
+  'loesch_titel': "{iso} wirklich löschen?",
+  'loesch_text': "Auch die zugehörigen Prüfsummen-Dateien werden entfernt.",
+  'einr_titel': "Ersteinrichtung nötig",
+  'einr_text': ("Damit die App ISOs bauen kann, fehlt auf diesem Rechner noch:\n\n{fehlt}\n\n"
+                "Soll ich das jetzt automatisch installieren und einrichten?\n"
+                "Dabei wird die App auch fest ins System eingebaut — dadurch ist sie\n"
+                "in jedem Schnappschuss gleich mit drin.\n"
+                "(Dafür wird einmal dein Passwort gebraucht. Internet nötig.\n"
+                "Hinweis: Der Baustein »live-boot« erneuert dabei die Start-Datei\n"
+                "des Systems — das ist normal und beim gewöhnlichen Start ohne Wirkung.)"),
+  'einr_laeuft': "🔧 Richte ein … (Einzelheiten im Klapp-Bereich unten)",
+  'einr_fertig_titel': "✅ Einrichtung abgeschlossen",
+  'einr_fertig_text': "Alles bereit — du kannst jetzt deinen ersten Schnappschuss erstellen.",
+  'einr_fehler_titel': "Einrichtung unvollständig",
+  'einr_fehler_text': ("Es sind Fehler aufgetreten. Die Einzelheiten stehen im\n"
+                       "Klapp-Bereich unten und in {log}."),
+  'einr_knopf': "🔧 Jetzt einrichten",
+  'einr_spaeter': "Später",
+  'einr_hinweis_phase': "⚠️ Ersteinrichtung nötig — Klick auf »Jetzt einrichten« unten.",
+ },
+ 'en': {
+  'untertitel': "1:1 clone of your Linux Mint system as a bootable ISO — one click",
+  'herausgeber': "Published by Gilbert Rikus · GPL-3 · v{v}",
+  'knopf_ueber': "ℹ️ About",
+  'frame_auswahl': " What goes into the snapshot? ",
+  'klon_info': ("The snapshot is a 1:1 clone: your account, settings and saved logins\n"
+                "are always included — everything keeps working as usual."),
+  'weglassen_titel': "Leave out big folders? (checked = stays out, smaller ISO)",
+  'privat_hinweis': ("🔒 The stick contains your account and credentials —\n"
+                     "keep it in a safe place and never hand it to strangers."),
+  'groesse_offen': "measuring …",
+  'anzeige_vms': "Virtual machines (VMs)",
+  'anzeige_steam': "Steam games",
+  'anzeige_flatpak': "Flatpak app data",
+  'knopf_bauen': "  📸  Create snapshot now  ",
+  'knopf_abbruch': "✋ Cancel",
+  'bereit': "Ready — click »Create snapshot now«.",
+  'bereit_kurz': "Ready.",
+  'konfig_fehlt': "Configuration missing",
+  'schritt1': "Step 1 of 3: Checking requirements and copying the system … (longest part)",
+  'schritt2': "Step 2 of 3: Compressing the system …",
+  'schritt3': "Step 3 of 3: Building the bootable ISO …",
+  'fertig_phase': "✅ Done: {iso}",
+  'fertig_titel': "✅ Snapshot finished!",
+  'fertig_text': ("{iso}\nSize: {groesse}  →  your USB stick must be at least this big.\n\n"
+                  "Next step: select it below and click »Write to USB stick«.\n\n"
+                  "Good to know: the stick boots straight into your usual environment\n"
+                  "(user »{liveuser}«). To install, double-click the »Install System«\n"
+                  "icon right on the desktop — the installation is a 1:1 takeover,\n"
+                  "including your account.\n\n"
+                  "🔒 The stick contains your credentials — keep it safe!"),
+  'kein_abbild_phase': "❌ No new ISO was created.",
+  'kein_abbild_titel': "No image created",
+  'kein_abbild_text': ("The run ended without a new ISO.\n"
+                       "»Technical details« below shows the reason."),
+  'abbruch_titel': "Really cancel the build?",
+  'abbruch_text': "Half-finished working files will be cleaned up.",
+  'abgebrochen': "Cancelled — working files cleaned up.",
+  'lauf_gefunden': "Found a running build — display re-attached …",
+  'details': "Technical details (for emergencies only)",
+  'frame_liste': " Finished images ",
+  'spalte_datei': "File", 'spalte_groesse': "Size", 'spalte_erstellt': "Created",
+  'knopf_stick': "🖊️ Write to USB stick",
+  'knopf_pruef': "🔍 Verify stick (checksum)",
+  'knopf_loesch': "🗑️ Delete",
+  'ablage': "Location: <b>{ordner}</b>   ·   Free space: <b>{platz}</b>",
+  'erst_auswaehlen_titel': "Please select first",
+  'auswahl_schreiben': "Select the ISO in the list that should go onto the stick.",
+  'auswahl_pruefen': "Select the ISO in the list to compare the stick against.",
+  'auswahl_loeschen': "Select the ISO in the list that should be deleted.",
+  'pruef_laeuft': "🔍 Verifying the stick — takes a few minutes, please wait …",
+  'kein_stick_titel': "No USB stick found",
+  'kein_stick_text': "Please plug in the stick and verify again.",
+  'stick_ok_titel': "✅ Stick is PERFECT",
+  'stick_ok_text': ("The stick {geraet} matches\n{iso} bit for bit.\n\n"
+                    "How to use the stick:\n"
+                    "1. Restart the computer and open the boot menu\n"
+                    "    (usually F12 — on some machines F2, F8 or Esc)\n"
+                    "2. Choose the USB stick\n"
+                    "3. Pick the first entry in the start menu\n"
+                    "4. The system boots straight into your usual environment\n"
+                    "5. To install: double-click »Install System«\n"
+                    "    right on the desktop — a 1:1 takeover"),
+  'stick_falsch_titel': "❌ Stick differs!",
+  'stick_falsch_text': ("The stick {geraet} does NOT match the ISO.\n"
+                        "Please write it again or use another stick."),
+  'pruef_fehler': "Verification failed",
+  'loesch_titel': "Really delete {iso}?",
+  'loesch_text': "The matching checksum files will be removed too.",
+  'einr_titel': "First-time setup required",
+  'einr_text': ("Before this app can build ISOs, this computer is still missing:\n\n{fehlt}\n\n"
+                "Install and configure everything automatically now?\n"
+                "This also installs the app into the system itself — that way it is\n"
+                "included in every snapshot.\n"
+                "(Your password is needed once. Internet required.\n"
+                "Note: the »live-boot« component refreshes the system's start file —\n"
+                "that is normal and has no effect on ordinary boots.)"),
+  'einr_laeuft': "🔧 Setting up … (details in the expander below)",
+  'einr_fertig_titel': "✅ Setup complete",
+  'einr_fertig_text': "All set — you can create your first snapshot now.",
+  'einr_fehler_titel': "Setup incomplete",
+  'einr_fehler_text': ("Errors occurred. Details are in the expander below\n"
+                       "and in {log}."),
+  'einr_knopf': "🔧 Set up now",
+  'einr_spaeter': "Later",
+  'einr_hinweis_phase': "⚠️ First-time setup required — click »Set up now« below.",
+ },
+}
+T = T_ALLE[SPRACHE]
+
+# ======================= System-Dynamik =======================
+
+def _lauf(cmd):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=10).stdout.strip()
+    except Exception:
+        return ''
+
+def distro_name():
+    name = _lauf(['lsb_release', '-is']) or ''
+    ver = _lauf(['lsb_release', '-rs']) or ''
+    if name.lower() == 'linuxmint':
+        name = 'Linux Mint'
+    if not name:
+        daten = {}
+        try:
+            for zeile in open('/etc/os-release'):
+                if '=' in zeile:
+                    k, w = zeile.strip().split('=', 1)
+                    daten[k] = w.strip('"')
+        except FileNotFoundError:
+            pass
+        name = daten.get('NAME', 'Linux')
+        ver = daten.get('VERSION_ID', '')
+    return f"{name} {ver}".strip()
+
+DISTRO = distro_name()
+DISTRO_KURZ = re.sub(r'[^A-Za-z0-9]+', '', DISTRO.split(' ' )[0] + DISTRO.split(' ')[1] if len(DISTRO.split(' ')) > 1 else DISTRO) or 'Linux'
+
+# Der Live-Stick startet als der ECHTE Besitzer des Systems (Klon-Modell):
+LIVE_USER = getpass.getuser()
+
+def nutzer_locale():
+    lang = os.environ.get('LANG') or 'en_US.UTF-8'
+    return lang if '.' in lang else lang + '.UTF-8'
+
+def nutzer_tastatur():
+    try:
+        for zeile in open('/etc/default/keyboard'):
+            if zeile.startswith('XKBLAYOUT='):
+                return zeile.split('=', 1)[1].strip().strip('"').split(',')[0] or 'us'
+    except FileNotFoundError:
+        pass
+    return SPRACHE if SPRACHE != 'en' else 'us'
+
+def nutzer_zeitzone():
+    try:
+        return open('/etc/timezone').read().strip()
+    except FileNotFoundError:
+        ziel = os.path.realpath('/etc/localtime')
+        return ziel.split('zoneinfo/')[-1] if 'zoneinfo/' in ziel else 'UTC'
+
+def sprach_anzeige():
+    code = (os.environ.get('LANG') or 'en')[:2].lower()
+    return SPRACHNAMEN.get(code, code)
+
+def groesse_lesbar(bytes_):
+    for einheit in ('B', 'KB', 'MB', 'GB', 'TB'):
+        if bytes_ < 1024 or einheit == 'TB':
+            return f"{bytes_:.1f} {einheit}" if einheit != 'B' else f"{int(bytes_)} B"
+        bytes_ /= 1024
+
+def root_praefix():
+    """Passwortloses sudo, wenn vorhanden (z. B. lm) — sonst pkexec-Passwortdialog."""
+    if subprocess.run(['sudo', '-n', 'true'], capture_output=True).returncode == 0:
+        return 'sudo -n'
+    return 'pkexec'
+
+def dicke_ordner():
+    """Kandidaten fuer die Weglassen-Haekchen: die grossen sichtbaren Ordner des
+    Nutzers (XDG-Namen beruecksichtigen Uebersetzungen wie 'Bilder') + Sonderfaelle.
+    Die unsichtbaren Einstellungs-Ordner stehen NIE zur Wahl — 1:1-Prinzip."""
+    home = os.path.expanduser('~')
+    xdg = {}
+    try:
+        for zeile in open(os.path.join(home, '.config/user-dirs.dirs')):
+            m = re.match(r'XDG_(\w+)_DIR="?\$HOME/([^"\n]+)"?', zeile.strip())
+            if m:
+                xdg[m.group(1)] = os.path.join(home, m.group(2))
+    except OSError:
+        pass
+    kandidaten = []
+    for schluessel, fallback in (('DOCUMENTS', 'Documents'), ('PICTURES', 'Pictures'),
+                                 ('VIDEOS', 'Videos'), ('MUSIC', 'Music'),
+                                 ('DOWNLOAD', 'Downloads'), ('DESKTOP', 'Desktop')):
+        pfad = xdg.get(schluessel, os.path.join(home, fallback))
+        if os.path.isdir(pfad) and pfad != home:
+            kandidaten.append((pfad, os.path.basename(pfad.rstrip('/'))))
+    for unterordner, anzeige in (('VMs', T['anzeige_vms']),
+                                 ('.local/share/Steam', T['anzeige_steam']),
+                                 ('.var/app', T['anzeige_flatpak'])):
+        pfad = os.path.join(home, unterordner)
+        if os.path.isdir(pfad):
+            kandidaten.append((pfad, anzeige))
+    return kandidaten
+
+# ======================= Ersteinrichtung =======================
+
+BAU_PAKETE = ('calamares live-boot live-config-systemd live-boot-initramfs-tools '
+              'xorriso isolinux syslinux-common squashfs-tools grub-efi-amd64-bin '
+              'grub-pc-bin dosfstools rsync')
+
+def _system_app_version():
+    try:
+        for zeile in open(os.path.join(SYSTEM_ORDNER, 'linux-mint-snapshot.py')):
+            m = re.match(r'VERSION = "([^"]+)"', zeile)
+            if m:
+                return m.group(1)
+    except OSError:
+        pass
+    return None
+
+def fehlende_teile():
+    fehlt = []
+    if not shutil.which('refractasnapshot'):
+        fehlt.append('refractasnapshot (SourceForge)')
+    if not shutil.which('calamares'):
+        fehlt.append('calamares')
+    for prog, paket in (('mksquashfs', 'squashfs-tools'), ('xorriso', 'xorriso'),
+                        ('rsync', 'rsync')):
+        if not shutil.which(prog):
+            fehlt.append(paket)
+    if not os.path.isdir('/usr/lib/live/config'):
+        fehlt.append('live-config')
+    if not os.path.isdir('/usr/lib/grub/x86_64-efi'):
+        fehlt.append('grub-efi-amd64-bin')
+    if not (os.path.exists('/usr/lib/ISOLINUX/isolinux.bin')
+            or os.path.exists('/usr/lib/syslinux/modules/bios/ldlinux.c32')):
+        fehlt.append('isolinux')
+    try:
+        cala_aktuell = CALA_MARKER in open('/etc/calamares/settings.conf').read()
+    except OSError:
+        cala_aktuell = False
+    if not cala_aktuell:
+        fehlt.append('Calamares-Konfiguration (1:1-Klon)' if SPRACHE == 'de'
+                     else 'Calamares configuration (1:1 clone)')
+    for hook in ('0029-live-user-anlegen', '2000-installer-desktop-icon'):
+        if not os.path.exists(f'/usr/lib/live/config/{hook}'):
+            fehlt.append(f'Live-Baustein {hook}' if SPRACHE == 'de' else f'live component {hook}')
+    if not os.path.exists('/etc/skel/Desktop/system-installieren.desktop'):
+        fehlt.append('Installer-Schreibtisch-Symbol' if SPRACHE == 'de' else 'installer desktop icon')
+    if _system_app_version() != VERSION:
+        fehlt.append('App im System (/opt) — Teil jedes Schnappschusses' if SPRACHE == 'de'
+                     else 'app inside the system (/opt) — part of every snapshot')
+    return fehlt
+
+def einricht_skript():
+    """Bash-Skript fuer alles, was Root braucht (laeuft EINMAL ueber sudo/pkexec)."""
+    ver = DISTRO.split()[-1] if DISTRO.split() else ''
+    return f'''#!/bin/bash
+# Ersteinrichtung Linux Mint Snapshot v{VERSION} — laeuft als root, Protokoll siehe App.
+set -x
+export DEBIAN_FRONTEND=noninteractive
+FEHLER=0
+
+# update-Fehler (z. B. cdrom-Quelle im Live-System) nicht als Scheitern werten
+apt-get update || true
+apt-get install -y {BAU_PAKETE} || FEHLER=1
+
+if ! command -v refractasnapshot >/dev/null; then
+  T=$(mktemp -d)
+  if wget -q -O "$T/refractasnapshot-base.deb" "{REFRACTA_DEB_URL}"; then
+    dpkg -i "$T/refractasnapshot-base.deb" || apt-get -f install -y || FEHLER=1
+  else
+    echo "DOWNLOAD-FEHLER refractasnapshot"; FEHLER=1
+  fi
+  rm -rf "$T"
+fi
+dpkg --configure -a || true
+# Falls das Paket seine Konfigurationsdatei nicht anlegen konnte: Vorlage einspielen
+[ -f /etc/refractasnapshot.conf ] || cp "{DATEN}/refractasnapshot.conf.vorlage" /etc/refractasnapshot.conf || FEHLER=1
+
+# Calamares-Konfiguration (bewiesene 1:1-Klon-Vorlagen aus dem App-Paket)
+rm -rf /etc/calamares
+mkdir -p /etc/calamares
+cp -r "{DATEN}/calamares/." /etc/calamares/
+B=/etc/calamares/branding/linuxmint/branding.desc
+[ -n "{ver}" ] && sed -i 's/22\\.3/{ver}/g' "$B"
+
+# Live-Bausteine (Schreibtisch-Symbol; 0029 ist beim Klon-Modell untaetig, bleibt als Reserve)
+install -m 0755 "{DATEN}/live-hooks/0029-live-user-anlegen" /usr/lib/live/config/
+install -m 0755 "{DATEN}/live-hooks/2000-installer-desktop-icon" /usr/lib/live/config/
+mkdir -p /etc/skel/Desktop
+install -m 0755 "{DATEN}/desktop/system-installieren.desktop" /etc/skel/Desktop/
+
+# Calamares aus dem normalen Menue verstecken (Symbol auf dem Live-Schreibtisch ist der Weg)
+if [ -f /usr/share/applications/calamares.desktop ]; then
+  mkdir -p /usr/local/share/applications
+  cp /usr/share/applications/calamares.desktop /usr/local/share/applications/calamares.desktop
+  grep -q '^NoDisplay=true' /usr/local/share/applications/calamares.desktop || \
+    echo 'NoDisplay=true' >> /usr/local/share/applications/calamares.desktop
+fi
+
+# App fest ins System einbauen (/opt) — dadurch steckt sie in jedem Schnappschuss
+if [ "{APP_ORDNER}" != "{SYSTEM_ORDNER}" ]; then
+  mkdir -p "{SYSTEM_ORDNER}"
+  cp -r "{APP_ORDNER}/." "{SYSTEM_ORDNER}/"
+  rm -rf "{SYSTEM_ORDNER}/__pycache__"
+fi
+chmod 0755 "{SYSTEM_ORDNER}/linux-mint-snapshot.py"
+cat > /usr/share/applications/linux-mint-snapshot.desktop <<'MENUE'
+[Desktop Entry]
+Type=Application
+Name=Linux Mint Snapshot
+Comment=1:1 clone of your system as a bootable ISO / 1:1-Klon deines Systems als startfähige ISO
+Comment[de]=1:1-Klon deines Linux-Mint-Systems als startfähige ISO — mit einem Klick
+Exec=python3 {SYSTEM_ORDNER}/linux-mint-snapshot.py
+Icon={SYSTEM_ORDNER}/daten/icon.png
+Terminal=false
+Categories=System;Utility;
+Keywords=snapshot;iso;backup;live;usb;clone;sicherung;abbild;klon;
+MENUE
+
+mkdir -p {ISO_ORDNER}
+chown {getpass.getuser()} {ISO_ORDNER} 2>/dev/null
+
+exit $FEHLER
+'''
+
+# Klon-Modell: NUR echte Bremsen und Fallen bleiben draussen — alles andere ist 1:1.
+KLON_AUSSCHLUESSE = '''
+# Linux Mint Snapshot (Klon): nur Bremsen/Fallen ausschliessen, Rest bleibt 1:1
+- /timeshift/*
+- /timeshift-btrfs/*
+- /swapfile
+- /home/*/.cache/*
+- /home/*/.local/share/Trash/*
+- /home/*/mnt/*
+- /home/*/.gvfs
+- /root/.cache/*
+'''
+
+def konfig_anlegen(weglassen=None):
+    """Klon-Konfiguration frisch schreiben (kein Root noetig). weglassen = Liste
+    absoluter Ordner-Pfade, deren INHALT draussen bleibt (Haekchen)."""
+    os.makedirs(KONFIG_ORDNER, exist_ok=True)
+    basis_conf = '/etc/refractasnapshot.conf'
+    basis_liste = '/usr/lib/refractasnapshot/snapshot_exclude.list'
+    if not os.path.exists(basis_conf):
+        # Paket nur halb konfiguriert (z. B. Live-System mit cdrom-Quelle):
+        # mitgelieferte Vorlage nutzen — die eigenen Werte werden eh ersetzt.
+        basis_conf = os.path.join(DATEN, 'refractasnapshot.conf.vorlage')
+        if not os.path.exists(basis_conf):
+            return False
+    basis = open(basis_conf).read()
+
+    # Ausschluss-Liste: Basis-Liste OHNE deren /home-Regeln (der Klon nimmt das
+    # Home ja mit!) + eigene Bremsen-Liste + die abgewaehlten dicken Ordner.
+    zeilen = []
+    if os.path.exists(basis_liste):
+        for zeile in open(basis_liste):
+            if zeile.strip().startswith('- /home'):
+                continue
+            zeilen.append(zeile.rstrip('\n'))
+    liste = "\n".join(zeilen) + KLON_AUSSCHLUESSE
+    if weglassen:
+        liste += "\n# Vom Nutzer abgewaehlte grosse Ordner (Haekchen in der App):\n"
+        for pfad in weglassen:
+            liste += f"- {pfad}/*\n"
+    liste_pfad = os.path.join(KONFIG_ORDNER, 'klon.list')
+    with open(liste_pfad, 'w') as f:
+        f.write(liste)
+
+    conf_pfad = os.path.join(KONFIG_ORDNER, 'klon.conf')
+    text = basis
+    ersetzungen = {
+        'snapshot_excludes': f'"{liste_pfad}"',
+        'snapshot_basename': f'"{DISTRO_KURZ}-Klon"',
+        'kernel_image': f'"{KONFIG_ORDNER}/vmlinuz"',
+        'initrd_image': f'"{KONFIG_ORDNER}/initrd.img"',
+        'make_sha256sum': '"yes"',
+    }
+    for schluessel, wert in ersetzungen.items():
+        muster = re.compile(rf'^#?\s*{schluessel}=.*$', re.MULTILINE)
+        if muster.search(text):
+            text = muster.sub(f'{schluessel}={wert}', text, count=1)
+        else:
+            text += f'\n{schluessel}={wert}\n'
+    with open(conf_pfad, 'w') as f:
+        f.write(text)
+
+    # Aufraeumen: Konfigurationssaetze des alten Zwitter-Modells (v4) entfernen
+    for alt in ('ohne-home', 'mit-home'):
+        for endung in ('.conf', '.list'):
+            pfad = os.path.join(KONFIG_ORDNER, alt + endung)
+            if os.path.exists(pfad):
+                os.remove(pfad)
+    return True
+
+def menue_eintrag_anlegen():
+    """Bruecke fuer den allerersten Start aus dem Home-Ordner: Nutzer-Menueeintrag,
+    bis die Einrichtung den systemweiten Eintrag (/usr/share) anlegt — danach
+    raeumt sich die Bruecke selbst weg (kein Doppel im Startmenue)."""
+    nutzer_eintrag = os.path.expanduser('~/.local/share/applications/linux-mint-snapshot.desktop')
+    if os.path.exists('/usr/share/applications/linux-mint-snapshot.desktop'):
+        if os.path.exists(nutzer_eintrag):
+            try:
+                os.remove(nutzer_eintrag)
+            except OSError:
+                pass
+        return
+    exec_zeile = f'Exec=python3 "{os.path.join(APP_ORDNER, "linux-mint-snapshot.py")}"'
+    inhalt = f"""[Desktop Entry]
+Type=Application
+Name=Linux Mint Snapshot
+Comment=1:1 clone of your system as a bootable ISO / 1:1-Klon deines Systems als startfähige ISO
+Comment[de]=1:1-Klon deines Linux-Mint-Systems als startfähige ISO — mit einem Klick
+{exec_zeile}
+Icon={os.path.join(DATEN, "icon.png")}
+Terminal=false
+Categories=System;Utility;
+Keywords=snapshot;iso;backup;live;usb;clone;sicherung;abbild;klon;
+"""
+    try:
+        alt = open(nutzer_eintrag).read() if os.path.exists(nutzer_eintrag) else ''
+        if exec_zeile not in alt:
+            os.makedirs(os.path.dirname(nutzer_eintrag), exist_ok=True)
+            with open(nutzer_eintrag, 'w') as f:
+                f.write(inhalt)
+    except OSError:
+        pass
+
+def boot_vorlagen_fuellen():
+    """Boot-Menue-Vorlagen in der Sprache DES NUTZERS erzeugen (im Konfig-Ordner);
+    der Bau-Befehl kopiert sie mit Root-Rechten an die Refracta-Pfade."""
+    # ${DISTRO} in den Vorlagen ersetzt REFRACTA selbst beim Bau (Name kommt via stdin);
+    # hier nur die eigenen {PLATZHALTER} fuellen.
+    werte = {'{SPRACHNAME}': sprach_anzeige(), '{LOCALE}': nutzer_locale(),
+             '{KEYBOARD}': nutzer_tastatur(), '{TIMEZONE}': nutzer_zeitzone(),
+             '{LIVEUSER}': LIVE_USER}
+    ergebnis = []
+    for vorlage, ziel in (('grub.cfg.template.in', 'grub.cfg.template'),
+                          ('live.cfg.in', 'live.cfg')):
+        text = open(os.path.join(DATEN, 'boot-vorlagen', vorlage)).read()
+        for platzhalter, wert in werte.items():
+            text = text.replace(platzhalter, wert)
+        ziel_pfad = os.path.join(KONFIG_ORDNER, ziel)
+        with open(ziel_pfad, 'w') as f:
+            f.write(text)
+        ergebnis.append(ziel_pfad)
+    return ergebnis
+
+# ======================= Fenster =======================
+
+class SnapshotApp(Gtk.Window):
+
+    def __init__(self, selbsttest=False):
+        super().__init__(title="Linux Mint Snapshot")
+        self.set_default_size(760, 700)
+        self.set_border_width(14)
+        self.icon_pfad = os.path.join(DATEN, 'icon.png')
+        if os.path.exists(self.icon_pfad):
+            self.set_icon_from_file(self.icon_pfad)
+
+        self.selbsttest = selbsttest
+        self.iso_ordner = os.environ.get('MINT_SNAP_TESTORDNER', ISO_ORDNER) \
+            if selbsttest else ISO_ORDNER
+        self.root = root_praefix()
+        self.bau_pid = None
+        self.lauf_aktiv = False
+        self.bau_startzeit = None
+        self._log_pos = 0
+        self._log_rest = b''
+        self._bau_phase = 1
+        self._phase_merker = ("", -1)
+        self._schritte_gesehen = set()
+
+        haupt = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        self.add(haupt)
+
+        titel_zeile = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        titel = Gtk.Label()
+        titel.set_markup("<span size='x-large' weight='bold'>📸 Linux Mint Snapshot</span>\n"
+                         f"<span size='small'>{GLib.markup_escape_text(T['untertitel'])}</span>\n"
+                         f"<span size='small' style='italic'>{GLib.markup_escape_text(T['herausgeber'].format(v=VERSION))}</span>")
+        titel.set_justify(Gtk.Justification.CENTER)
+        titel.set_hexpand(True)
+        titel_zeile.pack_start(titel, True, True, 0)
+        self.knopf_ueber = Gtk.Button(label=T['knopf_ueber'])
+        self.knopf_ueber.set_valign(Gtk.Align.START)
+        self.knopf_ueber.connect('clicked', self.ueber_zeigen)
+        titel_zeile.pack_start(self.knopf_ueber, False, False, 0)
+        haupt.pack_start(titel_zeile, False, False, 0)
+
+        self.info_label = Gtk.Label()
+        haupt.pack_start(self.info_label, False, False, 0)
+
+        rahmen = Gtk.Frame(label=T['frame_auswahl'])
+        box_wahl = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box_wahl.set_border_width(10)
+        rahmen.add(box_wahl)
+
+        lbl_klon = Gtk.Label()
+        lbl_klon.set_markup(f"<span size='small' foreground='#3a7d3a'>{GLib.markup_escape_text(T['klon_info'])}</span>")
+        lbl_klon.set_halign(Gtk.Align.START)
+        box_wahl.pack_start(lbl_klon, False, False, 0)
+
+        lbl_weg = Gtk.Label(label=T['weglassen_titel'])
+        lbl_weg.set_halign(Gtk.Align.START)
+        box_wahl.pack_start(lbl_weg, False, False, 4)
+
+        gemerkt = []
+        try:
+            gemerkt = json.load(open(WEGLASSEN_DATEI))
+        except (OSError, ValueError):
+            pass
+        self.haekchen = {}      # pfad -> CheckButton
+        self._anzeigen = {}     # pfad -> Anzeigename
+        gitter = Gtk.FlowBox()
+        gitter.set_selection_mode(Gtk.SelectionMode.NONE)
+        gitter.set_max_children_per_line(2)
+        gitter.set_min_children_per_line(2)
+        for pfad, anzeige in dicke_ordner():
+            cb = Gtk.CheckButton(label=f"{anzeige}  ({T['groesse_offen']})")
+            cb.set_active(pfad in gemerkt)
+            self.haekchen[pfad] = cb
+            self._anzeigen[pfad] = anzeige
+            gitter.add(cb)
+        box_wahl.pack_start(gitter, False, False, 0)
+
+        lbl_privat = Gtk.Label()
+        lbl_privat.set_markup(f"<span size='small' foreground='#a05050'>{GLib.markup_escape_text(T['privat_hinweis'])}</span>")
+        lbl_privat.set_halign(Gtk.Align.START)
+        box_wahl.pack_start(lbl_privat, False, False, 4)
+        haupt.pack_start(rahmen, False, False, 0)
+
+        zeile_start = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.knopf_bauen = Gtk.Button(label=T['knopf_bauen'])
+        self.knopf_bauen.get_style_context().add_class('suggested-action')
+        self.knopf_bauen.connect('clicked', self.bauen_geklickt)
+        self.knopf_abbruch = Gtk.Button(label=T['knopf_abbruch'])
+        self.knopf_abbruch.set_sensitive(False)
+        self.knopf_abbruch.connect('clicked', self.abbrechen_geklickt)
+        self.knopf_einrichten = Gtk.Button(label=T['einr_knopf'])
+        self.knopf_einrichten.connect('clicked', self.einrichten_geklickt)
+        self.knopf_einrichten.set_no_show_all(True)
+        zeile_start.pack_start(self.knopf_bauen, True, False, 0)
+        zeile_start.pack_start(self.knopf_einrichten, False, False, 0)
+        zeile_start.pack_start(self.knopf_abbruch, False, False, 0)
+        haupt.pack_start(zeile_start, False, False, 0)
+
+        self.phase_label = Gtk.Label(label=T['bereit'])
+        self.phase_label.set_halign(Gtk.Align.START)
+        haupt.pack_start(self.phase_label, False, False, 0)
+
+        self.balken = Gtk.ProgressBar()
+        self.balken.set_show_text(True)
+        haupt.pack_start(self.balken, False, False, 0)
+
+        self.details_puffer = Gtk.TextBuffer()
+        details_ansicht = Gtk.TextView(buffer=self.details_puffer)
+        details_ansicht.set_editable(False)
+        details_ansicht.set_monospace(True)
+        details_ansicht.override_font(Pango.FontDescription('Monospace 8'))
+        scroll_d = Gtk.ScrolledWindow()
+        scroll_d.set_min_content_height(140)
+        scroll_d.add(details_ansicht)
+        expander = Gtk.Expander(label=T['details'])
+        expander.add(scroll_d)
+        haupt.pack_start(expander, True, True, 0)
+        self.details_ansicht = details_ansicht
+
+        rahmen_liste = Gtk.Frame(label=T['frame_liste'])
+        box_liste = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        box_liste.set_border_width(8)
+        rahmen_liste.add(box_liste)
+        self.store = Gtk.ListStore(str, str, str, str)
+        self.liste = Gtk.TreeView(model=self.store)
+        for i, spalte in enumerate((T['spalte_datei'], T['spalte_groesse'], T['spalte_erstellt'])):
+            self.liste.append_column(Gtk.TreeViewColumn(spalte, Gtk.CellRendererText(), text=i))
+        scroll_l = Gtk.ScrolledWindow()
+        scroll_l.set_min_content_height(100)
+        scroll_l.add(self.liste)
+        box_liste.pack_start(scroll_l, True, True, 0)
+        zeile = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.knopf_stick = Gtk.Button(label=T['knopf_stick'])
+        self.knopf_stick.connect('clicked', self.stick_schreiben)
+        self.knopf_pruef = Gtk.Button(label=T['knopf_pruef'])
+        self.knopf_pruef.connect('clicked', self.stick_pruefen)
+        self.knopf_loesch = Gtk.Button(label=T['knopf_loesch'])
+        self.knopf_loesch.connect('clicked', self.iso_loeschen)
+        for k in (self.knopf_stick, self.knopf_pruef, self.knopf_loesch):
+            zeile.pack_start(k, False, False, 0)
+        box_liste.pack_start(zeile, False, False, 0)
+        haupt.pack_start(rahmen_liste, False, False, 0)
+
+        if not self.selbsttest:
+            menue_eintrag_anlegen()
+        self.liste_aktualisieren()
+        self._laufenden_bau_adoptieren()
+        self._einrichtung_pruefen()
+        if self.haekchen:
+            threading.Thread(target=self._groessen_ermitteln, daemon=True).start()
+
+        if self.selbsttest:
+            GLib.timeout_add(1200, self._selbsttest_start)
+
+    # ================= Hilfen =================
+
+    def _freier_platz(self):
+        st = os.statvfs('/')
+        return groesse_lesbar(st.f_bavail * st.f_frsize)
+
+    def _groessen_ermitteln(self):
+        for pfad, cb in list(self.haekchen.items()):
+            try:
+                out = subprocess.run(['du', '-sb', pfad], capture_output=True,
+                                     text=True, timeout=300).stdout
+                groesse = groesse_lesbar(int(out.split()[0]))
+            except Exception:
+                groesse = '?'
+            name = self._anzeigen[pfad]
+            GLib.idle_add(cb.set_label, f"{name}  ({groesse})")
+
+    def setze_phase(self, text, anteil=None):
+        prozent = int(anteil * 100) if anteil is not None else -1
+        if (text, prozent) == self._phase_merker:
+            return
+        self._phase_merker = (text, prozent)
+        s = SCHRITT_MUSTER.search(text)
+        if s:
+            self._schritte_gesehen.add(int(s.group(1)))
+        def _tun():
+            self.phase_label.set_markup(f"<b>{GLib.markup_escape_text(text)}</b>")
+            if anteil is not None:
+                self.balken.set_fraction(min(anteil, 1.0))
+                self.balken.set_text(f"{prozent} %")
+            return False
+        GLib.idle_add(_tun)
+
+    def melde(self, art, titel, text):
+        if self.selbsttest:
+            print(f"SELBSTTEST-DIALOG [{titel}]: {text.splitlines()[0] if text else ''}")
+            return
+        def _zeigen():
+            d = Gtk.MessageDialog(transient_for=self, modal=True, message_type=art,
+                                  buttons=Gtk.ButtonsType.OK, text=titel)
+            d.format_secondary_text(text)
+            d.run()
+            d.destroy()
+            return False
+        GLib.idle_add(_zeigen)
+
+    def ueber_zeigen(self, *_args):
+        d = Gtk.AboutDialog(transient_for=self, modal=True)
+        d.set_program_name("Linux Mint Snapshot")
+        d.set_version(VERSION)
+        d.set_comments(T['untertitel'])
+        d.set_license_type(Gtk.License.GPL_3_0)
+        d.set_authors(["Gilbert Rikus"])
+        d.set_copyright("© Gilbert Rikus")
+        if os.path.exists(self.icon_pfad):
+            d.set_logo(GdkPixbuf.Pixbuf.new_from_file(self.icon_pfad))
+        d.run()
+        d.destroy()
+
+    def gewaehlte_iso(self):
+        model, it = self.liste.get_selection().get_selected()
+        return model[it][3] if it else None
+
+    def liste_aktualisieren(self):
+        def _tun():
+            self.store.clear()
+            for pfad in sorted(glob.glob(os.path.join(self.iso_ordner, '*.iso')),
+                               key=os.path.getmtime, reverse=True):
+                st = os.stat(pfad)
+                self.store.append([os.path.basename(pfad), groesse_lesbar(st.st_size),
+                                   datetime.datetime.fromtimestamp(st.st_mtime).strftime('%d.%m.%Y %H:%M'),
+                                   pfad])
+            self.info_label.set_markup("<span size='small'>" + T['ablage'].format(
+                ordner=self.iso_ordner, platz=self._freier_platz()) + "</span>")
+            return False
+        GLib.idle_add(_tun)
+
+    def _puls(self):
+        if self.lauf_aktiv and self.balken.get_fraction() == 0.0:
+            self.balken.pulse()
+        return self.lauf_aktiv
+
+    def _details_anhaengen(self, text):
+        def _tun():
+            ende = self.details_puffer.get_end_iter()
+            self.details_puffer.insert(ende, text)
+            self.details_ansicht.scroll_mark_onscreen(self.details_puffer.get_insert())
+            return False
+        GLib.idle_add(_tun)
+
+    # ================= Ersteinrichtung =================
+
+    def _einrichtung_pruefen(self):
+        if self.selbsttest:
+            return
+        self._fehlt = fehlende_teile()
+        if self._fehlt:
+            self.knopf_bauen.set_sensitive(False)
+            self.knopf_einrichten.show()
+            self.setze_phase(T['einr_hinweis_phase'])
+
+    def einrichten_geklickt(self, _knopf):
+        d = Gtk.MessageDialog(transient_for=self, modal=True,
+                              message_type=Gtk.MessageType.QUESTION,
+                              buttons=Gtk.ButtonsType.NONE,
+                              text=T['einr_titel'])
+        d.add_buttons(T['einr_spaeter'], Gtk.ResponseType.NO,
+                      T['einr_knopf'], Gtk.ResponseType.YES)
+        d.format_secondary_text(T['einr_text'].format(fehlt="\n".join("• " + f for f in self._fehlt)))
+        antwort = d.run()
+        d.destroy()
+        if antwort != Gtk.ResponseType.YES:
+            return
+        skript_pfad = os.path.join(KONFIG_ORDNER, 'einrichtung.sh')
+        os.makedirs(KONFIG_ORDNER, exist_ok=True)
+        with open(skript_pfad, 'w') as f:
+            f.write(einricht_skript())
+        os.chmod(skript_pfad, 0o755)
+        self.knopf_einrichten.set_sensitive(False)
+        self.lauf_aktiv = True
+        GLib.timeout_add(200, self._puls)
+        self.setze_phase(T['einr_laeuft'])
+        threading.Thread(target=self._einrichten_arbeit, args=(skript_pfad,), daemon=True).start()
+
+    def _einrichten_arbeit(self, skript_pfad):
+        with open(EINRICHT_LOG, 'w') as log:
+            p = subprocess.Popen(self.root.split() + ['bash', skript_pfad],
+                                 stdout=log, stderr=subprocess.STDOUT)
+            p.wait()
+        try:
+            self._details_anhaengen(open(EINRICHT_LOG, errors='replace').read())
+        except FileNotFoundError:
+            pass
+        self.lauf_aktiv = False
+        # Es zaehlt der ENDZUSTAND, nicht der Skript-Rueckgabewert: apt/dpkg melden
+        # im Live-Betrieb harmlose Zwischenfehler (cdrom-Quelle, deb-Nachinstallation).
+        rest = fehlende_teile()
+        if not rest:
+            menue_eintrag_anlegen()  # Nutzer-Bruecke weg, systemweiter Eintrag steht
+            self.melde(Gtk.MessageType.INFO, T['einr_fertig_titel'], T['einr_fertig_text'])
+            def _frei():
+                self.knopf_bauen.set_sensitive(True)
+                self.knopf_einrichten.hide()
+                self.setze_phase(T['bereit'])
+                return False
+            GLib.idle_add(_frei)
+        else:
+            self._fehlt = rest or ['?']
+            self.melde(Gtk.MessageType.ERROR, T['einr_fehler_titel'],
+                       T['einr_fehler_text'].format(log=EINRICHT_LOG))
+            GLib.idle_add(lambda: (self.knopf_einrichten.set_sensitive(True), False)[1])
+
+    # ================= ISO bauen =================
+
+    def bauen_geklickt(self, _knopf):
+        if self.lauf_aktiv:
+            return
+        weglassen = [pfad for pfad, cb in self.haekchen.items() if cb.get_active()]
+        try:
+            os.makedirs(KONFIG_ORDNER, exist_ok=True)
+            with open(WEGLASSEN_DATEI, 'w') as f:
+                json.dump(weglassen, f)
+        except OSError:
+            pass
+        if not self.selbsttest:
+            if not konfig_anlegen(weglassen):
+                self.melde(Gtk.MessageType.ERROR, T['konfig_fehlt'],
+                           '/etc/refractasnapshot.conf')
+                return
+        conf = os.path.join(KONFIG_ORDNER, 'klon.conf')
+
+        kern = os.uname().release
+        for quelle, bruecke in ((f'/boot/vmlinuz-{kern}', 'vmlinuz'),
+                                (f'/boot/initrd.img-{kern}', 'initrd.img')):
+            ziel = os.path.join(KONFIG_ORDNER, bruecke)
+            if os.path.islink(ziel) or os.path.exists(ziel):
+                os.remove(ziel)
+            os.symlink(quelle, ziel)
+
+        if self.selbsttest:
+            kern_befehl = FAKE_MOTOR
+        else:
+            grub_v, live_v = boot_vorlagen_fuellen()
+            # EIN Root-Aufruf: Vorlagen einspielen + Motor starten
+            kern_befehl = (
+                f"{self.root} bash -c '"
+                f"cp \"{grub_v}\" /usr/lib/refractasnapshot/grub.cfg.template && "
+                f"cp \"{live_v}\" /usr/lib/refractasnapshot/iso/isolinux/live.cfg && "
+                f"printf \"1\\n{DISTRO}\\n\" | refractasnapshot -c \"{conf}\"'")
+
+        open(LOG_DATEI, 'w').close()
+        prozess = subprocess.Popen(
+            ['bash', '-c', f'{kern_befehl} >> "{LOG_DATEI}" 2>&1'],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, start_new_session=True)
+        self.bau_pid = prozess.pid
+        self._popen = prozess
+        with open(PID_DATEI, 'w') as f:
+            f.write(f"{prozess.pid} {datetime.datetime.now().isoformat()}")
+        self._bau_anzeige_starten(datetime.datetime.now())
+
+    def _laufenden_bau_adoptieren(self):
+        try:
+            with open(PID_DATEI) as f:
+                teile = f.read().split()
+            pid = int(teile[0])
+            start = datetime.datetime.fromisoformat(teile[1])
+        except (FileNotFoundError, ValueError, IndexError):
+            return
+        if os.path.exists(f'/proc/{pid}'):
+            self.bau_pid = pid
+            self._bau_anzeige_starten(start)
+            self.setze_phase(T['lauf_gefunden'])
+        else:
+            os.remove(PID_DATEI)
+
+    def _bau_anzeige_starten(self, startzeit):
+        self.lauf_aktiv = True
+        self.bau_startzeit = startzeit
+        self._log_pos = 0
+        self._log_rest = b''
+        self._bau_phase = 1
+        self._phase_merker = ("", -1)
+        self.knopf_bauen.set_sensitive(False)
+        self.knopf_abbruch.set_sensitive(True)
+        self.details_puffer.set_text("")
+        self.balken.set_fraction(0.0)
+        self.balken.set_text("")
+        GLib.timeout_add(200, self._puls)
+        GLib.timeout_add(400, self._bau_tick)
+        self.setze_phase(T['schritt1'])
+
+    def _bau_tick(self):
+        try:
+            with open(LOG_DATEI, 'rb') as f:
+                f.seek(self._log_pos)
+                daten = f.read()
+                self._log_pos = f.tell()
+        except FileNotFoundError:
+            daten = b''
+
+        if daten:
+            daten = self._log_rest + daten
+            teile = re.split(rb'[\r\n]', daten)
+            self._log_rest = teile.pop()
+            zeilen = []
+            for roh in teile:
+                zeile = roh.decode('utf-8', 'replace').strip()
+                if not zeile:
+                    continue
+                zeilen.append(zeile)
+                klein = zeile.lower()
+                if self._bau_phase < 2 and ('mksquashfs' in klein
+                                            or 'creating 4.0 filesystem' in klein
+                                            or 'squashing' in klein):
+                    self._bau_phase = 2
+                    self.setze_phase(T['schritt2'], 0.01)
+                elif self._bau_phase < 3 and ('creating cd/dvd image' in klein
+                                              or 'iso image produced' in klein):
+                    self._bau_phase = 3
+                    self.setze_phase(T['schritt3'], 0.90)
+                if self._bau_phase == 2 and ']' in zeile:
+                    treffer = PROZENT_MUSTER.search(zeile)
+                    if treffer:
+                        self.setze_phase(T['schritt2'],
+                                         0.01 + (int(treffer.group(1)) / 100) * 0.88)
+            if zeilen:
+                ende = self.details_puffer.get_end_iter()
+                self.details_puffer.insert(ende, "\n".join(zeilen) + "\n")
+                anzahl = self.details_puffer.get_line_count()
+                if anzahl > 1500:
+                    self.details_puffer.delete(self.details_puffer.get_start_iter(),
+                                               self.details_puffer.get_iter_at_line(anzahl - 1500))
+                self.details_puffer.place_cursor(self.details_puffer.get_end_iter())
+                self.details_ansicht.scroll_mark_onscreen(self.details_puffer.get_insert())
+
+        fertig = False
+        if self.bau_pid:
+            popen = getattr(self, '_popen', None)
+            if popen is not None and popen.pid == self.bau_pid:
+                fertig = popen.poll() is not None
+            else:
+                try:
+                    with open(f'/proc/{self.bau_pid}/stat') as f:
+                        zustand = f.read().rsplit(')', 1)[-1].split()[0]
+                    fertig = (zustand == 'Z')
+                except (FileNotFoundError, IndexError):
+                    fertig = True
+        if fertig:
+            popen = getattr(self, '_popen', None)
+            if popen is not None:
+                popen.wait()
+                self._popen = None
+            self._lauf_fertig()
+            return False
+        return True
+
+    def _lauf_fertig(self):
+        self.lauf_aktiv = False
+        self.bau_pid = None
+        if os.path.exists(PID_DATEI):
+            os.remove(PID_DATEI)
+        self.knopf_bauen.set_sensitive(True)
+        self.knopf_abbruch.set_sensitive(False)
+        self.liste_aktualisieren()
+
+        try:
+            with open(LOG_DATEI, errors='replace') as f:
+                erfolg_im_log = 'All finished!' in f.read()
+        except FileNotFoundError:
+            erfolg_im_log = False
+        neue = [p for p in glob.glob(os.path.join(self.iso_ordner, '*.iso'))
+                if self.bau_startzeit and datetime.datetime.fromtimestamp(
+                    os.path.getmtime(p)) > self.bau_startzeit]
+
+        if neue and erfolg_im_log:
+            iso = max(neue, key=os.path.getmtime)
+            self.balken.set_fraction(1.0)
+            self.balken.set_text("100 %")
+            self.setze_phase(T['fertig_phase'].format(iso=os.path.basename(iso)))
+            self.melde(Gtk.MessageType.INFO, T['fertig_titel'],
+                       T['fertig_text'].format(iso=os.path.basename(iso),
+                                               groesse=groesse_lesbar(os.path.getsize(iso)),
+                                               liveuser=LIVE_USER))
+            ergebnis_ok = True
+        else:
+            self.balken.set_fraction(0.0)
+            self.balken.set_text("")
+            self.setze_phase(T['kein_abbild_phase'])
+            self.melde(Gtk.MessageType.WARNING, T['kein_abbild_titel'], T['kein_abbild_text'])
+            ergebnis_ok = False
+
+        if self.selbsttest:
+            schritte = ",".join(str(s) for s in sorted(self._schritte_gesehen))
+            print(f"SELBSTTEST: sprache={SPRACHE} distro={DISTRO} liveuser={LIVE_USER} "
+                  f"haekchen={len(self.haekchen)} schritte={schritte} "
+                  f"ergebnis={'OK' if ergebnis_ok else 'FEHLER'}")
+            GLib.timeout_add(500, Gtk.main_quit)
+        return False
+
+    def _selbsttest_start(self):
+        print("SELBSTTEST: starte Bau-Klick")
+        self.knopf_bauen.clicked()
+        return False
+
+    def abbrechen_geklickt(self, _knopf):
+        if not self.lauf_aktiv:
+            return
+        d = Gtk.MessageDialog(transient_for=self, modal=True,
+                              message_type=Gtk.MessageType.QUESTION,
+                              buttons=Gtk.ButtonsType.YES_NO,
+                              text=T['abbruch_titel'])
+        d.format_secondary_text(T['abbruch_text'])
+        antwort = d.run()
+        d.destroy()
+        if antwort != Gtk.ResponseType.YES:
+            return
+        kill_teil = f'kill {self.bau_pid}; ' if self.bau_pid else ''
+        subprocess.run(self.root.split() + ['bash', '-c',
+                       f'pkill -x rsync; pkill -x mksquashfs; pkill -x xorriso; '
+                       f'{kill_teil}rm -rf /home/work'], check=False)
+        self.setze_phase(T['abgebrochen'])
+
+    # ================= Stick =================
+
+    def _stick_stromsparen_aus(self):
+        try:
+            subprocess.run(self.root.split() + ['bash', '-c', r'''
+for D in /sys/block/*; do
+  [ "$(cat $D/removable 2>/dev/null)" = "1" ] || continue
+  U=$(readlink -f $D); while [ "$U" != "/" ] && [ ! -e "$U/idVendor" ]; do U=$(dirname $U); done
+  [ -e "$U/idVendor" ] && echo on > $U/power/control
+done'''], timeout=25, check=False)
+        except Exception:
+            pass
+
+    def stick_schreiben(self, _knopf):
+        iso = self.gewaehlte_iso()
+        if not iso:
+            self.melde(Gtk.MessageType.WARNING, T['erst_auswaehlen_titel'], T['auswahl_schreiben'])
+            return
+        self._stick_stromsparen_aus()
+        try:
+            subprocess.Popen(['mintstick', '-m', 'iso', '-i', iso])
+        except Exception:
+            try:
+                subprocess.Popen(['mintstick', '-m', 'iso'])
+            except Exception as fehler:
+                self.melde(Gtk.MessageType.ERROR, "mintstick", str(fehler))
+
+    def stick_pruefen(self, _knopf):
+        iso = self.gewaehlte_iso()
+        if not iso:
+            self.melde(Gtk.MessageType.WARNING, T['erst_auswaehlen_titel'], T['auswahl_pruefen'])
+            return
+        self.setze_phase(T['pruef_laeuft'])
+        self.balken.set_fraction(0.0)
+        self.lauf_aktiv = True
+        self._stick_stromsparen_aus()
+        GLib.timeout_add(200, self._puls)
+        threading.Thread(target=self._pruef_arbeit, args=(iso,), daemon=True).start()
+
+    def _pruef_arbeit(self, iso):
+        try:
+            lsblk = subprocess.run(['lsblk', '-nd', '-o', 'NAME,TRAN,TYPE,MODEL'],
+                                   capture_output=True, text=True).stdout
+            sticks = [z.split(None, 3) for z in lsblk.splitlines()
+                      if len(z.split()) >= 3 and z.split()[1] == 'usb' and z.split()[2] == 'disk']
+            if not sticks:
+                self.melde(Gtk.MessageType.ERROR, T['kein_stick_titel'], T['kein_stick_text'])
+                return
+            name = sticks[0][0]
+            modell = sticks[0][3].strip() if len(sticks[0]) > 3 else ''
+            geraet = f"/dev/{name}" + (f" ({modell})" if modell else "")
+            geraet_pfad = f"/dev/{name}"
+            groesse = os.path.getsize(iso)
+
+            soll, werkzeug = None, 'sha256sum'
+            for endung, wz in (('.sha256', 'sha256sum'), ('.md5', 'md5sum')):
+                if os.path.exists(iso + endung):
+                    with open(iso + endung) as f:
+                        soll, werkzeug = f.read().split()[0], wz
+                    break
+            if soll is None:
+                soll = subprocess.run(['bash', '-c', f'sha256sum "{iso}"'],
+                                      capture_output=True, text=True).stdout.split()[0]
+
+            ist = subprocess.run(
+                self.root.split() + ['bash', '-c',
+                                     f'head -c {groesse} {geraet_pfad} | {werkzeug}'],
+                capture_output=True, text=True).stdout.split()[0]
+
+            if ist == soll:
+                self.melde(Gtk.MessageType.INFO, T['stick_ok_titel'],
+                           T['stick_ok_text'].format(geraet=geraet,
+                                                     iso=os.path.basename(iso)))
+            else:
+                self.melde(Gtk.MessageType.ERROR, T['stick_falsch_titel'],
+                           T['stick_falsch_text'].format(geraet=geraet))
+        except Exception as fehler:
+            self.melde(Gtk.MessageType.ERROR, T['pruef_fehler'], str(fehler))
+        finally:
+            self.lauf_aktiv = False
+            self.setze_phase(T['bereit_kurz'])
+
+    # ================= Löschen =================
+
+    def iso_loeschen(self, _knopf):
+        iso = self.gewaehlte_iso()
+        if not iso:
+            self.melde(Gtk.MessageType.WARNING, T['erst_auswaehlen_titel'], T['auswahl_loeschen'])
+            return
+        d = Gtk.MessageDialog(transient_for=self, modal=True,
+                              message_type=Gtk.MessageType.QUESTION,
+                              buttons=Gtk.ButtonsType.YES_NO,
+                              text=T['loesch_titel'].format(iso=os.path.basename(iso)))
+        d.format_secondary_text(T['loesch_text'])
+        antwort = d.run()
+        d.destroy()
+        if antwort == Gtk.ResponseType.YES:
+            for pfad in (iso, iso + '.md5', iso + '.sha256', iso + '.log'):
+                if os.path.exists(pfad):
+                    os.remove(pfad)
+            self.liste_aktualisieren()
+
+
+if __name__ == '__main__':
+    selbsttest = '--selbsttest' in sys.argv and (
+        os.environ.get('MINT_SNAP_TEST') == '1' or os.environ.get('LM_SNAP_TEST') == '1')
+    fenster = SnapshotApp(selbsttest=selbsttest)
+    fenster.connect('destroy', Gtk.main_quit)
+    fenster.show_all()
+    if selbsttest:
+        fenster.knopf_einrichten.hide()
+    Gtk.main()

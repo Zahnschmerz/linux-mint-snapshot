@@ -1,0 +1,40 @@
+---
+componentName: linuxmint
+
+welcomeStyleCalamares: false
+welcomeExpandingLogo: true
+
+windowExpanding: normal
+windowSize: 960px,640px
+windowPlacement: center
+
+sidebar: widget
+navigation: widget
+
+strings:
+    productName: "Linux Mint"
+    shortProductName: "Linux Mint"
+    version: "22.3"
+    shortVersion: "22.3"
+    versionedName: "Linux Mint 22.3"
+    shortVersionedName: "Mint 22.3"
+    bootloaderEntryName: "LinuxMint"
+    productUrl: ""
+    supportUrl: ""
+    knownIssuesUrl: ""
+    releaseNotesUrl: ""
+    donateUrl: ""
+
+images:
+    productLogo: "logo.png"
+    productIcon: "logo.png"
+    productWelcome: "logo.png"
+
+style:
+   SidebarBackground:        "#2f2f2f"
+   SidebarText:              "#FFFFFF"
+   SidebarTextCurrent:       "#2f2f2f"
+   SidebarBackgroundCurrent: "#87bf40"
+
+slideshow: "show.qml"
+slideshowAPI: 2

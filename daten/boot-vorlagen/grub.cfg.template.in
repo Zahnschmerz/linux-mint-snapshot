@@ -1,0 +1,49 @@
+if loadfont $prefix/font.pf2 ; then
+  set gfxmode=640x480
+  insmod efi_gop
+  insmod efi_uga
+  insmod video_bochs
+  insmod video_cirrus
+  insmod gfxterm
+  insmod jpeg
+  insmod png
+  terminal_output gfxterm
+fi
+
+background_image /boot/grub/splash.png
+set menu_color_normal=white/black
+set menu_color_highlight=dark-gray/white
+set timeout=15
+
+
+menuentry "${DISTRO} (Standard)" {
+    set gfxpayload=keep
+    linux   /live/vmlinuz boot=live ${ifnames_opt} ${netconfig_opt} username={LIVEUSER} locales={LOCALE} keyboard-layouts={KEYBOARD} timezone={TIMEZONE}
+    initrd  /live/initrd.img
+}
+
+menuentry "${DISTRO} - English (US)" {
+    set gfxpayload=keep
+    linux   /live/vmlinuz boot=live ${ifnames_opt} ${netconfig_opt} username={LIVEUSER} locales=en_US.UTF-8 keyboard-layouts=us
+    initrd  /live/initrd.img
+}
+
+submenu 'Erweiterte Optionen ...' {
+
+    menuentry "${DISTRO} (in den RAM laden / load to RAM)" {
+	set gfxpayload=keep
+	linux   /live/vmlinuz boot=live toram ${ifnames_opt} ${netconfig_opt} username={LIVEUSER} locales={LOCALE} keyboard-layouts={KEYBOARD} timezone={TIMEZONE}
+	initrd  /live/initrd.img
+    }
+
+    menuentry "${DISTRO} (failsafe/Notmodus)" {
+	set gfxpayload=keep
+	linux   /live/vmlinuz boot=live nocomponents=xinit noapm noapic nolapic nodma nosmp forcepae nomodeset vga=normal ${ifnames_opt} ${netconfig_opt} username={LIVEUSER}
+	initrd  /live/initrd.img
+    }
+
+    menuentry "Speichertest (Memory test)" {
+	kernel   /live/memtest
+    }
+
+}

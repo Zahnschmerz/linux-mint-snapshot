@@ -1,0 +1,18 @@
+#!/bin/sh
+# Legt den Live-Benutzer SELBST an — die Standard-Komponente 0030-user-setup
+# verlangt fest UID 1000, die auf System-Schnappschuessen immer besetzt ist
+# (Original-Benutzer!) und scheitert dann still. Wir nehmen die naechste freie.
+# Laeuft VOR 0030/0040, damit sudo/lightdm den Benutzer vorfinden.
+# 2026-07-06 fuer "Schnappschuss fuer Linux Mint" (Herausgeber: Gilbert Rikus)
+
+LIVE_USER=$(grep -o 'username=[^ ]*' /proc/cmdline | head -1 | cut -d= -f2)
+[ -n "$LIVE_USER" ] || exit 0
+
+if ! grep -q "^${LIVE_USER}:" /etc/passwd; then
+    useradd -m -k /etc/skel -s /bin/bash -c "Live-Benutzer" "$LIVE_USER"
+    passwd -d "$LIVE_USER" >/dev/null 2>&1
+    for G in sudo adm cdrom plugdev lpadmin dip video audio; do
+        getent group "$G" >/dev/null 2>&1 && usermod -aG "$G" "$LIVE_USER" 2>/dev/null
+    done
+fi
+exit 0

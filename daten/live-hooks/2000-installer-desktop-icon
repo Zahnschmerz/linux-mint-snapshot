@@ -1,0 +1,40 @@
+#!/bin/sh
+# Laeuft NUR beim Live-Boot (live-config). Zwei Aufgaben:
+# 1) Auto-Anmeldung HART auf den Live-Benutzer stellen — die Standard-Komponente
+#    0100-lightdm ersetzt nur auskommentierte Zeilen und versagt daher auf
+#    Systemen mit aktiver Auto-Anmeldung.
+# 2) "System installieren"-Symbol auf alle Schreibtische legen.
+# v3 (Klon-Modell 2026-07-07): KEIN rekursives chown mehr uebers Home — beim
+# 1:1-Klon ist das Home gross und die Rechte stimmen bereits; nur das kopierte
+# Symbol bekommt den richtigen Besitzer.
+
+LIVE_USER=$(grep -o 'username=[^ ]*' /proc/cmdline | head -1 | cut -d= -f2)
+[ -n "$LIVE_USER" ] || LIVE_USER=mint
+
+if [ -e /etc/lightdm/lightdm.conf ]; then
+    sed -i -r "s|^#?[[:space:]]*autologin-user=.*$|autologin-user=${LIVE_USER}|" /etc/lightdm/lightdm.conf
+    grep -q "^autologin-user=${LIVE_USER}$" /etc/lightdm/lightdm.conf || \
+        printf '[Seat:*]\nautologin-user=%s\nautologin-user-timeout=0\n' "$LIVE_USER" \
+        > /etc/lightdm/lightdm.conf.d/99-live-autologin.conf 2>/dev/null
+fi
+# auch conf.d-Dateien mit fremdem Autologin auf den Live-Benutzer stellen
+for F in /etc/lightdm/lightdm.conf.d/*.conf; do
+    [ -e "$F" ] || continue
+    sed -i -r "s|^([[:space:]]*autologin-user=).*$|\1${LIVE_USER}|" "$F"
+done
+
+for H in /home/*; do
+    [ -d "$H" ] || continue
+    U=$(basename "$H")
+    id "$U" >/dev/null 2>&1 || continue
+    if [ ! -d "$H/Desktop" ] && [ ! -d "$H/Schreibtisch" ]; then
+        mkdir -p "$H/Desktop" 2>/dev/null && chown "$U:$U" "$H/Desktop" 2>/dev/null
+    fi
+    for Z in "$H/Desktop" "$H/Schreibtisch"; do
+        [ -d "$Z" ] || continue
+        cp /etc/skel/Desktop/system-installieren.desktop "$Z/" 2>/dev/null
+        chmod +x "$Z/system-installieren.desktop" 2>/dev/null
+        chown "$U:$U" "$Z/system-installieren.desktop" 2>/dev/null
+    done
+done
+exit 0
