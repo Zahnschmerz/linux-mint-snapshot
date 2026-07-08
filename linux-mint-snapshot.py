@@ -906,6 +906,7 @@ class SnapshotApp(Gtk.Window):
     def bauen_geklickt(self, _knopf):
         if self.lauf_aktiv:
             return
+        os.makedirs(self.iso_ordner, exist_ok=True)
         weglassen = [pfad for pfad, cb in self.haekchen.items() if cb.get_active()]
         try:
             os.makedirs(KONFIG_ORDNER, exist_ok=True)
