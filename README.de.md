@@ -17,6 +17,7 @@ Herausgeber: Gilbert Rikus · Kostenlos, quelloffen (GPL-3.0) · Keine Werbung, 
 - **Auf USB schreiben** über Mints eigenes Schreibprogramm.
 - **Eingebaute Bit-für-Bit-Kontrolle des Sticks** — kein Rätselraten, ob er gut geschrieben wurde.
 - **Der Stick startet direkt in dein eigenes Konto und deine Sprache** — kein anonymer Platzhalter-Nutzer.
+- **Startet auch mit eingeschaltetem Secure Boot** — die ISO enthält die von Microsoft signierte shim- und von Canonical signierte GRUB-Kette, startet also auf modernen PCs (z. B. mit Windows-Dualboot), *ohne* Secure Boot ausschalten zu müssen. Läuft mit an oder aus.
 - **Symbol „System installieren" direkt auf dem Live-Schreibtisch** (auf Basis von Calamares) übernimmt alles 1:1: keine Benutzer-Anlage, keine erneute Sprache/Zeitzone/Tastatur-Abfrage — es ist ja schon deins.
 - **Deutsche/englische Oberfläche**, automatisch nach Systemsprache.
 
@@ -27,7 +28,7 @@ Herausgeber: Gilbert Rikus · Kostenlos, quelloffen (GPL-3.0) · Keine Werbung, 
 | Betriebssystem | Linux Mint 22.x (Cinnamon getestet), x86_64 |
 | Freier Platz | ~2× die Größe deines installierten Systems |
 | Internet | nur für die einmalige Ersteinrichtung |
-| Secure Boot | muss aktuell ausgeschaltet sein (signierter Bootloader ist geplant) |
+| Secure Boot | **wird unterstützt** — signierte shim-+-GRUB-Kette (Microsoft/Canonical); startet mit Secure Boot an *oder* aus, kein BIOS-Umstellen nötig |
 
 ## Erste Schritte
 

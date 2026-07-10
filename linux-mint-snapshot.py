@@ -32,7 +32,7 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, GLib, Pango, GdkPixbuf
 
-VERSION = "5.0"
+VERSION = "5.1"
 APP_ORDNER = os.path.dirname(os.path.abspath(__file__))
 SYSTEM_ORDNER = '/opt/linux-mint-snapshot'
 DATEN = os.path.join(APP_ORDNER, 'daten')
@@ -97,6 +97,7 @@ T_ALLE = {
   'schritt1': "Schritt 1 von 3: Prüfe Voraussetzungen und kopiere das System … (dauert am längsten)",
   'schritt2': "Schritt 2 von 3: Komprimiere das System …",
   'schritt3': "Schritt 3 von 3: Baue die startfähige ISO …",
+  'schritt4': "Fast fertig: mache die ISO Secure-Boot-fähig …",
   'fertig_phase': "✅ Fertig: {iso}",
   'fertig_titel': "✅ Schnappschuss fertig!",
   'fertig_text': ("{iso}\nGröße: {groesse}  →  der USB-Stick muss mindestens so groß sein.\n\n"
@@ -184,6 +185,7 @@ T_ALLE = {
   'schritt1': "Step 1 of 3: Checking requirements and copying the system … (longest part)",
   'schritt2': "Step 2 of 3: Compressing the system …",
   'schritt3': "Step 3 of 3: Building the bootable ISO …",
+  'schritt4': "Almost done: making the ISO Secure-Boot-capable …",
   'fertig_phase': "✅ Done: {iso}",
   'fertig_titel': "✅ Snapshot finished!",
   'fertig_text': ("{iso}\nSize: {groesse}  →  your USB stick must be at least this big.\n\n"
@@ -352,7 +354,19 @@ def dicke_ordner():
 
 BAU_PAKETE = ('calamares live-boot live-config-systemd live-boot-initramfs-tools '
               'xorriso isolinux syslinux-common squashfs-tools grub-efi-amd64-bin '
-              'grub-pc-bin dosfstools rsync')
+              'grub-pc-bin dosfstools rsync '
+              # Secure Boot: fertig signierte Bausteine (Microsoft/Canonical) + mtools fuers EFI-Image
+              'shim-signed grub-efi-amd64-signed mtools')
+
+# ---- Secure-Boot-Bausteine (fertig signiert von Microsoft/Canonical) ----
+# Microsoft-signierter shim (Erststarter), Canonical-signierter GRUB, MokManager.
+SHIM_SIGNED = '/usr/lib/shim/shimx64.efi.signed.latest'
+SHIM_SIGNED_ALT = '/usr/lib/shim/shimx64.efi.signed'
+GRUB_SIGNED = '/usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed'
+MOKMANAGER = '/usr/lib/shim/mmx64.efi'
+ISOHDPFX = '/usr/lib/ISOLINUX/isohdpfx.bin'
+# GUID des EFI-System-Partition-Typs (fuer die echte ESP in der ISO)
+ESP_TYP_GUID = 'C12A7328-F81F-11D2-BA4B-00A0C93EC93B'
 
 def _system_app_version():
     try:
@@ -381,6 +395,13 @@ def fehlende_teile():
     if not (os.path.exists('/usr/lib/ISOLINUX/isolinux.bin')
             or os.path.exists('/usr/lib/syslinux/modules/bios/ldlinux.c32')):
         fehlt.append('isolinux')
+    # Secure-Boot-Bausteine (damit die ISO auch mit eingeschaltetem Secure Boot startet)
+    if not shutil.which('mformat'):
+        fehlt.append('mtools')
+    if not (os.path.exists(SHIM_SIGNED) or os.path.exists(SHIM_SIGNED_ALT)):
+        fehlt.append('shim-signed')
+    if not os.path.exists(GRUB_SIGNED):
+        fehlt.append('grub-efi-amd64-signed')
     try:
         cala_aktuell = CALA_MARKER in open('/etc/calamares/settings.conf').read()
     except OSError:
@@ -484,6 +505,67 @@ KLON_AUSSCHLUESSE = '''
 - /root/.cache/*
 '''
 
+def _shim_pfad():
+    return SHIM_SIGNED if os.path.exists(SHIM_SIGNED) else SHIM_SIGNED_ALT
+
+def secure_boot_moeglich():
+    """Sind die fertig signierten Bausteine + Werkzeuge da, um eine Secure-Boot-faehige
+    ISO zu bauen? (shim-signed = Microsoft, grub-efi-amd64-signed = Canonical, mtools.)"""
+    return (os.path.exists(_shim_pfad()) and os.path.exists(GRUB_SIGNED)
+            and os.path.exists(ISOHDPFX) and shutil.which('mformat') is not None)
+
+def secure_boot_nachbau_bash():
+    """Bash-Schnipsel (laeuft als root DIREKT nach refractasnapshot): ersetzt das
+    selbstgebaute, UNSIGNIERTE EFI durch die fertig signierte Kette
+    shim -> GRUB -> (Mint-)Kernel und packt die ISO mit einer echten EFI-System-
+    Partition neu. Ergebnis bootet auch mit eingeschaltetem Secure Boot.
+    Ist idempotent + selbstsichernd: fehlt etwas, bleibt die normale ISO unveraendert."""
+    shim = _shim_pfad()
+    return f'''
+# ===== Secure-Boot-Nachbau =====
+SB_WORK="/home/work"; SB_ISOROOT="$SB_WORK/iso"; SB_SNAP="{ISO_ORDNER}"
+SB_SHIM="{shim}"; SB_GRUB="{GRUB_SIGNED}"; SB_MM="{MOKMANAGER}"; SB_PFX="{ISOHDPFX}"
+if [ -d "$SB_ISOROOT/isolinux" ] && [ -f "$SB_SHIM" ] && [ -f "$SB_GRUB" ] && command -v mformat >/dev/null; then
+  SB_ISO="$(ls -t "$SB_SNAP"/*.iso 2>/dev/null | head -1)"
+  if [ -n "$SB_ISO" ]; then
+    echo "Schritt 4: Secure-Boot-faehig machen ..."
+    SB_VOL="$(blkid -o value -s LABEL "$SB_ISO" 2>/dev/null)"; [ -n "$SB_VOL" ] || SB_VOL="LinuxMintSnapshot"
+    SB_FWD="$(mktemp)"
+    printf 'search --no-floppy --set=root --file /isolinux/isolinux.cfg\\nset prefix=($root)/boot/grub\\nconfigfile $prefix/grub.cfg\\n' > "$SB_FWD"
+    SB_EFI="$SB_ISOROOT/boot/grub/efiboot.img"
+    rm -f "$SB_EFI"
+    dd if=/dev/zero of="$SB_EFI" bs=1M count=40 status=none
+    mformat -i "$SB_EFI" -F ::
+    mmd -i "$SB_EFI" ::/EFI ::/EFI/BOOT ::/EFI/ubuntu
+    mcopy -i "$SB_EFI" "$SB_SHIM" ::/EFI/BOOT/BOOTX64.EFI
+    mcopy -i "$SB_EFI" "$SB_GRUB" ::/EFI/BOOT/grubx64.efi
+    [ -f "$SB_MM" ] && mcopy -i "$SB_EFI" "$SB_MM" ::/EFI/BOOT/mmx64.efi
+    mcopy -i "$SB_EFI" "$SB_FWD" ::/EFI/ubuntu/grub.cfg
+    mkdir -p "$SB_ISOROOT/EFI/BOOT" "$SB_ISOROOT/EFI/ubuntu"
+    cp "$SB_SHIM" "$SB_ISOROOT/EFI/BOOT/BOOTX64.EFI"
+    cp "$SB_GRUB" "$SB_ISOROOT/EFI/BOOT/grubx64.efi"
+    [ -f "$SB_MM" ] && cp "$SB_MM" "$SB_ISOROOT/EFI/BOOT/mmx64.efi"
+    cp "$SB_FWD" "$SB_ISOROOT/EFI/ubuntu/grub.cfg"
+    rm -f "$SB_FWD" "$SB_ISOROOT/efi/boot/bootx64.efi"
+    if xorriso -as mkisofs -r -J -joliet-long -l -iso-level 3 \\
+        -isohybrid-mbr "$SB_PFX" -partition_offset 16 -V "$SB_VOL" \\
+        -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table \\
+        -eltorito-alt-boot -e '--interval:appended_partition_2:all::' -no-emul-boot \\
+        -append_partition 2 {ESP_TYP_GUID} "$SB_EFI" -appended_part_as_gpt \\
+        -o "$SB_ISO.sb" "$SB_ISOROOT"; then
+      mv -f "$SB_ISO.sb" "$SB_ISO"
+      sha256sum "$SB_ISO" > "$SB_ISO.sha256"
+      echo "Secure-Boot-ISO fertig: $(basename "$SB_ISO")"
+    else
+      echo "Secure-Boot-Nachbau fehlgeschlagen - normale ISO bleibt erhalten."
+      rm -f "$SB_ISO.sb"
+    fi
+  fi
+fi
+rm -rf "$SB_WORK" 2>/dev/null || true
+echo "All finished!"
+'''
+
 def konfig_anlegen(weglassen=None):
     """Klon-Konfiguration frisch schreiben (kein Root noetig). weglassen = Liste
     absoluter Ordner-Pfade, deren INHALT draussen bleibt (Haekchen)."""
@@ -523,6 +605,8 @@ def konfig_anlegen(weglassen=None):
         'kernel_image': f'"{KONFIG_ORDNER}/vmlinuz"',
         'initrd_image': f'"{KONFIG_ORDNER}/initrd.img"',
         'make_sha256sum': '"yes"',
+        # Arbeitsordner behalten: der Secure-Boot-Nachbau packt die ISO daraus neu.
+        'save_work': '"yes"' if secure_boot_moeglich() else '"no"',
     }
     for schluessel, wert in ersetzungen.items():
         muster = re.compile(rf'^#?\s*{schluessel}=.*$', re.MULTILINE)
@@ -933,12 +1017,18 @@ class SnapshotApp(Gtk.Window):
             kern_befehl = FAKE_MOTOR
         else:
             grub_v, live_v = boot_vorlagen_fuellen()
-            # EIN Root-Aufruf: Vorlagen einspielen + Motor starten
-            kern_befehl = (
-                f"{self.root} bash -c '"
-                f"cp \"{grub_v}\" /usr/lib/refractasnapshot/grub.cfg.template && "
-                f"cp \"{live_v}\" /usr/lib/refractasnapshot/iso/isolinux/live.cfg && "
-                f"printf \"1\\n{DISTRO}\\n\" | refractasnapshot -c \"{conf}\"'")
+            # EIN Root-Aufruf: Vorlagen einspielen + Motor starten (+ Secure-Boot-Nachbau)
+            innen = (
+                f'cp "{grub_v}" /usr/lib/refractasnapshot/grub.cfg.template && '
+                f'cp "{live_v}" /usr/lib/refractasnapshot/iso/isolinux/live.cfg && '
+                f'printf "1\\n{DISTRO}\\n" | refractasnapshot -c "{conf}"')
+            if secure_boot_moeglich():
+                # Nachbau in eine Datei schreiben (haelt Anfuehrungszeichen aus dem Aufruf raus)
+                sb_skript = os.path.join(KONFIG_ORDNER, 'secure-boot-nachbau.sh')
+                with open(sb_skript, 'w') as f:
+                    f.write('#!/bin/bash\n' + secure_boot_nachbau_bash())
+                innen += f'; bash "{sb_skript}"'
+            kern_befehl = f"{self.root} bash -c '{innen}'"
 
         open(LOG_DATEI, 'w').close()
         prozess = subprocess.Popen(
@@ -1011,6 +1101,9 @@ class SnapshotApp(Gtk.Window):
                                               or 'iso image produced' in klein):
                     self._bau_phase = 3
                     self.setze_phase(T['schritt3'], 0.90)
+                elif self._bau_phase < 4 and 'secure-boot-f' in klein:
+                    self._bau_phase = 4
+                    self.setze_phase(T['schritt4'], 0.95)
                 if self._bau_phase == 2 and ']' in zeile:
                     treffer = PROZENT_MUSTER.search(zeile)
                     if treffer:

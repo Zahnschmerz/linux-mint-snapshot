@@ -99,9 +99,10 @@ nothing needs to be set up again.
    user), with your icons, settings and apps, exactly as you know it.
    Nothing on your real computer changes unless you install.
 
-> ⚠️ **Important:** if **Secure Boot** is enabled in the BIOS, the stick
-> will not start (yet). You can disable Secure Boot in the BIOS/UEFI
-> under "Security".
+> ✅ **Secure Boot:** the stick starts **even with Secure Boot enabled** —
+> you don't need to change anything in the BIOS. The ISO carries a
+> Microsoft- and Canonical-signed boot chain that modern PCs (including
+> those with Windows alongside) accept. It works with Secure Boot on or off.
 
 ---
 
@@ -134,7 +135,8 @@ The live desktop shows the icon **"Install System"**:
 range. The VM/Steam/Flatpak checkboxes let you shrink it.
 
 **Stick does not boot?**  Wrong boot-menu key (try F12/F2/F8/Esc),
-disable Secure Boot, or re-write and verify the stick (step 5).
+or re-write and verify the stick (step 5). (Secure Boot does NOT need to
+be turned off — the ISO is signed.)
 
 **May I close the window during a build?**  Yes. The build continues
 in the background; reopening the app re-attaches the display.

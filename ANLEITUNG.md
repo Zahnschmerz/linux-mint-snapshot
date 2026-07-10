@@ -101,8 +101,10 @@ funktioniert alles wie gewohnt, ohne dass du irgendetwas neu einrichten musst.
    und Programmen, genau wie du es kennst. Nichts an deinem echten Rechner
    wird verändert, solange du nicht installierst.
 
-> ⚠️ **Wichtig:** Ist **Secure Boot** im BIOS eingeschaltet, startet der Stick
-> (noch) nicht. Secure Boot lässt sich im BIOS/UEFI unter „Security" ausschalten.
+> ✅ **Secure Boot:** Der Stick startet auch mit **eingeschaltetem Secure Boot** —
+> du musst im BIOS nichts umstellen. Die ISO enthält eine von Microsoft und
+> Canonical signierte Startkette, die moderne PCs (auch mit Windows daneben)
+> akzeptieren. Er läuft mit Secure Boot an oder aus.
 
 ---
 
@@ -134,7 +136,8 @@ Auf dem Schreibtisch des Live-Systems liegt das Symbol **„System installieren"
 8–20 GB. Über die Häkchen bei VMs/Steam/Flatpak lässt sie sich verkleinern.
 
 **Der Stick startet nicht?**  Boot-Menü-Taste falsch (F12/F2/F8/Esc probieren),
-Secure Boot ausschalten, oder Stick neu schreiben und kontrollieren (Punkt 5).
+oder Stick neu schreiben und kontrollieren (Punkt 5). (Secure Boot muss NICHT
+ausgeschaltet werden — die ISO ist signiert.)
 
 **Kann ich das Fenster während des Baus schließen?**  Ja. Der Bau läuft im
 Hintergrund weiter; beim nächsten Öffnen koppelt sich die Anzeige wieder an.

@@ -17,6 +17,7 @@ Published by Gilbert Rikus · Free and open source (GPL-3.0) · No ads, no accou
 - **Write to USB** via Linux Mint's own image writer.
 - **Built-in bit-by-bit USB verification** — no guessing whether the stick is good.
 - **The live stick boots straight into your own account and language** — no generic placeholder user.
+- **Boots with Secure Boot enabled** — the ISO carries the Microsoft-signed shim + Canonical-signed GRUB chain, so it starts on modern PCs (e.g. with a Windows dual-boot) *without* turning Secure Boot off. Works with it on or off.
 - **"Install System" icon right on the live desktop** (powered by Calamares) does a full 1:1 takeover: no user-creation step, no re-entering language/timezone/keyboard — it's all already yours.
 - **German / English GUI**, chosen automatically from your system language.
 
@@ -27,7 +28,7 @@ Published by Gilbert Rikus · Free and open source (GPL-3.0) · No ads, no accou
 | OS | Linux Mint 22.x (Cinnamon tested), x86_64 |
 | Disk space | ~2× your installed system size, free |
 | Internet | only for the one-time first-run setup |
-| Secure Boot | must be turned off for now (signed boot loader is on the roadmap) |
+| Secure Boot | **supported** — signed shim + GRUB chain (Microsoft/Canonical); boots with Secure Boot on *or* off, no BIOS changes needed |
 
 ## Getting started
 
