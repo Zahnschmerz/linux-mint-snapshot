@@ -32,7 +32,7 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, GLib, Pango, GdkPixbuf
 
-VERSION = "5.1"
+VERSION = "5.3"
 APP_ORDNER = os.path.dirname(os.path.abspath(__file__))
 SYSTEM_ORDNER = '/opt/linux-mint-snapshot'
 DATEN = os.path.join(APP_ORDNER, 'daten')
@@ -41,6 +41,7 @@ LOG_DATEI = os.path.join(KONFIG_ORDNER, 'letzter-lauf.log')
 PID_DATEI = os.path.join(KONFIG_ORDNER, 'lauf.pid')
 EINRICHT_LOG = os.path.join(KONFIG_ORDNER, 'einrichtung.log')
 WEGLASSEN_DATEI = os.path.join(KONFIG_ORDNER, 'weglassen.json')
+ZUSATZ_DATEI = os.path.join(KONFIG_ORDNER, 'zusatz-ordner.json')
 ISO_ORDNER = '/home/snapshot'
 REFRACTA_DEB_URL = ('https://master.dl.sourceforge.net/project/refracta/tools/'
                     'refractasnapshot-base_10.2.12_all.deb?viasf=1')
@@ -89,6 +90,14 @@ T_ALLE = {
   'anzeige_vms': "Virtuelle Maschinen (VMs)",
   'anzeige_steam': "Steam-Spiele",
   'anzeige_flatpak': "Flatpak-Programmdaten",
+  'zusatz_knopf': "➕ Weiteren Ordner weglassen …",
+  'zusatz_titel': "Ordner zum Weglassen wählen",
+  'zusatz_add': "Weglassen",
+  'zusatz_abbr': "Abbrechen",
+  'zusatz_nurhome_titel': "Nur eigene Ordner",
+  'zusatz_nurhome_text': ("Bitte nur einen Ordner INNERHALB deines Persönlichen Ordners wählen.\n"
+                          "Ein System-Ordner oder der Persönliche Ordner selbst würde den Klon\n"
+                          "leeren oder unbootbar machen."),
   'knopf_bauen': "  📸  Schnappschuss jetzt erstellen  ",
   'knopf_abbruch': "✋ Abbrechen",
   'bereit': "Bereit — klicke auf »Schnappschuss jetzt erstellen«.",
@@ -177,6 +186,14 @@ T_ALLE = {
   'anzeige_vms': "Virtual machines (VMs)",
   'anzeige_steam': "Steam games",
   'anzeige_flatpak': "Flatpak app data",
+  'zusatz_knopf': "➕ Leave out another folder …",
+  'zusatz_titel': "Choose a folder to leave out",
+  'zusatz_add': "Leave out",
+  'zusatz_abbr': "Cancel",
+  'zusatz_nurhome_titel': "Only your own folders",
+  'zusatz_nurhome_text': ("Please pick a folder INSIDE your personal home folder.\n"
+                          "A system folder or the home folder itself would empty the clone\n"
+                          "or make it unbootable."),
   'knopf_bauen': "  📸  Create snapshot now  ",
   'knopf_abbruch': "✋ Cancel",
   'bereit': "Ready — click »Create snapshot now«.",
@@ -578,7 +595,10 @@ def konfig_anlegen(weglassen=None):
         basis_conf = os.path.join(DATEN, 'refractasnapshot.conf.vorlage')
         if not os.path.exists(basis_conf):
             return False
-    basis = open(basis_conf).read()
+    try:
+        basis = open(basis_conf).read()
+    except OSError:
+        return False
 
     # Ausschluss-Liste: Basis-Liste OHNE deren /home-Regeln (der Klon nimmt das
     # Home ja mit!) + eigene Bremsen-Liste + die abgewaehlten dicken Ordner.
@@ -592,7 +612,11 @@ def konfig_anlegen(weglassen=None):
     if weglassen:
         liste += "\n# Vom Nutzer abgewaehlte grosse Ordner (Haekchen in der App):\n"
         for pfad in weglassen:
-            liste += f"- {pfad}/*\n"
+            if '\n' in pfad or '\r' in pfad:        # Zeilenumbruch im Namen wuerde Filterzeilen injizieren
+                continue
+            # rsync-Glob-Metazeichen woertlich nehmen (ein Ordner "[x]" waere sonst eine Zeichenklasse)
+            sicher = re.sub(r'([\[\]*?])', r'\\\1', pfad)
+            liste += f"- {sicher}/*\n"
     liste_pfad = os.path.join(KONFIG_ORDNER, 'klon.list')
     with open(liste_pfad, 'w') as f:
         f.write(liste)
@@ -602,9 +626,16 @@ def konfig_anlegen(weglassen=None):
     ersetzungen = {
         'snapshot_excludes': f'"{liste_pfad}"',
         'snapshot_basename': f'"{DISTRO_KURZ}-Klon"',
+        'snapshot_dir': f'"{ISO_ORDNER}"',           # ISO landet DORT, wo die App sie sucht
         'kernel_image': f'"{KONFIG_ORDNER}/vmlinuz"',
         'initrd_image': f'"{KONFIG_ORDNER}/initrd.img"',
         'make_sha256sum': '"yes"',
+        # Kritische Schluessel ERZWINGEN -> keine Extra-Prompts (Pipe-Input begrenzt) + keine Haenger,
+        # egal was in einer vorhandenen /etc/refractasnapshot.conf steht:
+        'limit_cpu': '"no"',
+        'edit_boot_menu': '"no"',
+        'initrd_crypt': '""',
+        'make_efi': '"yes"',
         # Arbeitsordner behalten: der Secure-Boot-Nachbau packt die ISO daraus neu.
         'save_work': '"yes"' if secure_boot_moeglich() else '"no"',
     }
@@ -703,8 +734,13 @@ class SnapshotApp(Gtk.Window):
         self._phase_merker = ("", -1)
         self._schritte_gesehen = set()
 
+        # Ganzen Inhalt scrollbar machen, damit auf kleinen/HiDPI-Bildschirmen
+        # auch die unteren Knoepfe (USB schreiben) immer erreichbar bleiben.
+        scroll_aussen = Gtk.ScrolledWindow()
+        scroll_aussen.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.add(scroll_aussen)
         haupt = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        self.add(haupt)
+        scroll_aussen.add(haupt)
 
         titel_zeile = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         titel = Gtk.Label()
@@ -744,17 +780,26 @@ class SnapshotApp(Gtk.Window):
             pass
         self.haekchen = {}      # pfad -> CheckButton
         self._anzeigen = {}     # pfad -> Anzeigename
-        gitter = Gtk.FlowBox()
-        gitter.set_selection_mode(Gtk.SelectionMode.NONE)
-        gitter.set_max_children_per_line(2)
-        gitter.set_min_children_per_line(2)
+        self.gitter = Gtk.FlowBox()
+        self.gitter.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.gitter.set_max_children_per_line(2)
+        self.gitter.set_min_children_per_line(2)
+        # feste grosse Ordner (XDG + VMs/Steam/Flatpak)
         for pfad, anzeige in dicke_ordner():
-            cb = Gtk.CheckButton(label=f"{anzeige}  ({T['groesse_offen']})")
-            cb.set_active(pfad in gemerkt)
-            self.haekchen[pfad] = cb
-            self._anzeigen[pfad] = anzeige
-            gitter.add(cb)
-        box_wahl.pack_start(gitter, False, False, 0)
+            self._check_hinzu(pfad, anzeige, pfad in gemerkt)
+        # frueher frei hinzugefuegte Ordner (persistiert in ZUSATZ_DATEI)
+        try:
+            for pfad in json.load(open(ZUSATZ_DATEI)):
+                if os.path.isdir(pfad):
+                    self._check_hinzu(pfad, self._kurzname(pfad), pfad in gemerkt)
+        except (OSError, ValueError):
+            pass
+        box_wahl.pack_start(self.gitter, False, False, 0)
+        # Knopf: beliebigen weiteren Ordner weglassen (wie MX Snapshot)
+        knopf_ordner = Gtk.Button(label=T['zusatz_knopf'])
+        knopf_ordner.set_halign(Gtk.Align.START)
+        knopf_ordner.connect('clicked', self.ordner_waehlen)
+        box_wahl.pack_start(knopf_ordner, False, False, 2)
 
         lbl_privat = Gtk.Label()
         lbl_privat.set_markup(f"<span size='small' foreground='#a05050'>{GLib.markup_escape_text(T['privat_hinweis'])}</span>")
@@ -795,7 +840,7 @@ class SnapshotApp(Gtk.Window):
         scroll_d.add(details_ansicht)
         expander = Gtk.Expander(label=T['details'])
         expander.add(scroll_d)
-        haupt.pack_start(expander, True, True, 0)
+        haupt.pack_start(expander, False, False, 0)
         self.details_ansicht = details_ansicht
 
         rahmen_liste = Gtk.Frame(label=T['frame_liste'])
@@ -836,19 +881,76 @@ class SnapshotApp(Gtk.Window):
     # ================= Hilfen =================
 
     def _freier_platz(self):
-        st = os.statvfs('/')
+        # den Platz DORT messen, wo die ISO hinkommt (bei getrenntem /home wichtig)
+        ziel = self.iso_ordner if os.path.isdir(self.iso_ordner) else '/'
+        st = os.statvfs(ziel)
         return groesse_lesbar(st.f_bavail * st.f_frsize)
 
+    def _eine_groesse(self, pfad):
+        cb = self.haekchen.get(pfad)
+        if cb is None:
+            return
+        try:
+            out = subprocess.run(['du', '-sb', pfad], capture_output=True,
+                                 text=True, timeout=300).stdout
+            groesse = groesse_lesbar(int(out.split()[0]))
+        except Exception:
+            groesse = '?'
+        GLib.idle_add(cb.set_label, f"{self._anzeigen[pfad]}  ({groesse})")
+
     def _groessen_ermitteln(self):
-        for pfad, cb in list(self.haekchen.items()):
-            try:
-                out = subprocess.run(['du', '-sb', pfad], capture_output=True,
-                                     text=True, timeout=300).stdout
-                groesse = groesse_lesbar(int(out.split()[0]))
-            except Exception:
-                groesse = '?'
-            name = self._anzeigen[pfad]
-            GLib.idle_add(cb.set_label, f"{name}  ({groesse})")
+        for pfad in list(self.haekchen.keys()):
+            self._eine_groesse(pfad)
+
+    def _kurzname(self, pfad):
+        home = os.path.expanduser('~')
+        pfad = pfad.rstrip('/')
+        return '~' + pfad[len(home):] if pfad.startswith(home) else pfad
+
+    def _check_hinzu(self, pfad, anzeige, aktiv, sofort_messen=False):
+        """Einen Ordner als Weglassen-Haekchen einhaengen (feste ODER frei gewaehlte)."""
+        if pfad in self.haekchen:
+            return False
+        cb = Gtk.CheckButton(label=f"{anzeige}  ({T['groesse_offen']})")
+        cb.set_active(aktiv)
+        self.haekchen[pfad] = cb
+        self._anzeigen[pfad] = anzeige
+        self.gitter.add(cb)
+        cb.show()
+        if sofort_messen:
+            threading.Thread(target=self._eine_groesse, args=(pfad,), daemon=True).start()
+        return True
+
+    def _zusatz_speichern(self):
+        """Nur die frei hinzugefuegten Ordner (nicht die festen) merken."""
+        feste = {p for p, _ in dicke_ordner()}
+        zusatz = [p for p in self.haekchen if p not in feste]
+        try:
+            os.makedirs(KONFIG_ORDNER, exist_ok=True)
+            with open(ZUSATZ_DATEI, 'w') as f:
+                json.dump(zusatz, f)
+        except OSError:
+            pass
+
+    def ordner_waehlen(self, _knopf):
+        d = Gtk.FileChooserDialog(title=T['zusatz_titel'], transient_for=self,
+                                  action=Gtk.FileChooserAction.SELECT_FOLDER)
+        d.add_buttons(T['zusatz_abbr'], Gtk.ResponseType.CANCEL,
+                      T['zusatz_add'], Gtk.ResponseType.OK)
+        try:
+            d.set_current_folder(os.path.expanduser('~'))
+        except Exception:
+            pass
+        if d.run() == Gtk.ResponseType.OK:
+            pfad = (d.get_filename() or '').rstrip('/')
+            home = os.path.expanduser('~').rstrip('/')
+            # Schutz: nur ECHTE Unterordner des eigenen Home — sonst waere der 1:1-Klon
+            # leer (Home selbst gewaehlt) oder unbootbar (/etc, /usr, /boot ...).
+            if not pfad or not os.path.isdir(pfad) or pfad == home or not pfad.startswith(home + '/'):
+                self.melde(Gtk.MessageType.WARNING, T['zusatz_nurhome_titel'], T['zusatz_nurhome_text'])
+            elif self._check_hinzu(pfad, self._kurzname(pfad), True, sofort_messen=True):
+                self._zusatz_speichern()
+        d.destroy()
 
     def setze_phase(self, text, anteil=None):
         prozent = int(anteil * 100) if anteil is not None else -1
@@ -990,6 +1092,7 @@ class SnapshotApp(Gtk.Window):
     def bauen_geklickt(self, _knopf):
         if self.lauf_aktiv:
             return
+        self.root = root_praefix()   # JETZT bestimmen: ein sudo-Zeitstempel vom Start kann abgelaufen sein
         os.makedirs(self.iso_ordner, exist_ok=True)
         weglassen = [pfad for pfad, cb in self.haekchen.items() if cb.get_active()]
         try:
@@ -1008,6 +1111,9 @@ class SnapshotApp(Gtk.Window):
         kern = os.uname().release
         for quelle, bruecke in ((f'/boot/vmlinuz-{kern}', 'vmlinuz'),
                                 (f'/boot/initrd.img-{kern}', 'initrd.img')):
+            if not os.path.exists(quelle):           # ohne Kernel/initrd baut refracta eine unbootbare ISO
+                self.melde(Gtk.MessageType.ERROR, T['konfig_fehlt'], quelle)
+                return
             ziel = os.path.join(KONFIG_ORDNER, bruecke)
             if os.path.islink(ziel) or os.path.exists(ziel):
                 os.remove(ziel)
@@ -1027,7 +1133,7 @@ class SnapshotApp(Gtk.Window):
                 sb_skript = os.path.join(KONFIG_ORDNER, 'secure-boot-nachbau.sh')
                 with open(sb_skript, 'w') as f:
                     f.write('#!/bin/bash\n' + secure_boot_nachbau_bash())
-                innen += f'; bash "{sb_skript}"'
+                innen += f' && bash "{sb_skript}"'  # nur bei ERFOLGREICHEM refracta-Bau
             kern_befehl = f"{self.root} bash -c '{innen}'"
 
         open(LOG_DATEI, 'w').close()
@@ -1065,6 +1171,8 @@ class SnapshotApp(Gtk.Window):
         self._phase_merker = ("", -1)
         self.knopf_bauen.set_sensitive(False)
         self.knopf_abbruch.set_sensitive(True)
+        for k in (self.knopf_stick, self.knopf_pruef, self.knopf_loesch):
+            k.set_sensitive(False)   # waehrend des Baus keine Stick-Aktionen (teilt sich lauf_aktiv)
         self.details_puffer.set_text("")
         self.balken.set_fraction(0.0)
         self.balken.set_text("")
@@ -1147,6 +1255,8 @@ class SnapshotApp(Gtk.Window):
             os.remove(PID_DATEI)
         self.knopf_bauen.set_sensitive(True)
         self.knopf_abbruch.set_sensitive(False)
+        for k in (self.knopf_stick, self.knopf_pruef, self.knopf_loesch):
+            k.set_sensitive(True)
         self.liste_aktualisieren()
 
         try:
@@ -1200,10 +1310,20 @@ class SnapshotApp(Gtk.Window):
         d.destroy()
         if antwort != Gtk.ResponseType.YES:
             return
-        kill_teil = f'kill {self.bau_pid}; ' if self.bau_pid else ''
-        subprocess.run(self.root.split() + ['bash', '-c',
-                       f'pkill -x rsync; pkill -x mksquashfs; pkill -x xorriso; '
-                       f'{kill_teil}rm -rf /home/work'], check=False)
+        # NUR den eigenen Bau beenden — NIE systemweit fremde Prozesse killen
+        # (ein 'pkill -x rsync' wuerde z. B. ein laufendes Timeshift-Backup treffen).
+        pid = self.bau_pid
+        teile = []
+        if pid:
+            teile.append(f'kill -TERM -{pid} 2>/dev/null')  # eigene Bau-Prozessgruppe (sudo-Fall)
+        # refractasnapshot ist app-eigen (laeuft nie ausserhalb) -> gezielt samt Bau-Kindern (pkexec-Fall)
+        teile.append('for r in $(pgrep -f refractasnapshot 2>/dev/null); do kill -TERM -"$r" 2>/dev/null; done')
+        teile.append('sleep 1')
+        if pid:
+            teile.append(f'kill -KILL -{pid} 2>/dev/null')
+        teile.append('for r in $(pgrep -f refractasnapshot 2>/dev/null); do kill -KILL -"$r" 2>/dev/null; done')
+        teile.append('rm -rf /home/work')
+        subprocess.run(self.root.split() + ['bash', '-c', '; '.join(teile)], check=False)
         self.setze_phase(T['abgebrochen'])
 
     # ================= Stick =================

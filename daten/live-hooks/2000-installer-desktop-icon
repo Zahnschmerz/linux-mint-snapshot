@@ -28,13 +28,13 @@ for H in /home/*; do
     U=$(basename "$H")
     id "$U" >/dev/null 2>&1 || continue
     if [ ! -d "$H/Desktop" ] && [ ! -d "$H/Schreibtisch" ]; then
-        mkdir -p "$H/Desktop" 2>/dev/null && chown "$U:$U" "$H/Desktop" 2>/dev/null
+        mkdir -p "$H/Desktop" 2>/dev/null && chown "$U" "$H/Desktop" 2>/dev/null
     fi
     for Z in "$H/Desktop" "$H/Schreibtisch"; do
         [ -d "$Z" ] || continue
         cp /etc/skel/Desktop/system-installieren.desktop "$Z/" 2>/dev/null
         chmod +x "$Z/system-installieren.desktop" 2>/dev/null
-        chown "$U:$U" "$Z/system-installieren.desktop" 2>/dev/null
+        chown "$U" "$Z/system-installieren.desktop" 2>/dev/null
     done
 done
 exit 0
