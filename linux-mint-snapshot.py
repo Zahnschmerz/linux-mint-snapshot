@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Linux Mint Snapshot (v5.0) — 1:1 clone of the running system as a bootable live ISO.
+# Rikus Mintshot (v5.0) — 1:1 clone of the running system as a bootable live ISO.
 # Published by / Herausgeber: Gilbert Rikus — License: GPL-3.0-or-later
 #
 # v5 = the "clone model" (Gilbert's product decision, 2026-07-07, MX-Snapshot-like):
@@ -447,7 +447,7 @@ def einricht_skript():
     """Bash-Skript fuer alles, was Root braucht (laeuft EINMAL ueber sudo/pkexec)."""
     ver = DISTRO.split()[-1] if DISTRO.split() else ''
     return f'''#!/bin/bash
-# Ersteinrichtung Linux Mint Snapshot v{VERSION} — laeuft als root, Protokoll siehe App.
+# Ersteinrichtung Rikus Mintshot v{VERSION} — laeuft als root, Protokoll siehe App.
 set -x
 export DEBIAN_FRONTEND=noninteractive
 FEHLER=0
@@ -500,7 +500,7 @@ chmod 0755 "{SYSTEM_ORDNER}/linux-mint-snapshot.py"
 cat > /usr/share/applications/linux-mint-snapshot.desktop <<'MENUE'
 [Desktop Entry]
 Type=Application
-Name=Linux Mint Snapshot
+Name=Rikus Mintshot
 Comment=1:1 clone of your system as a bootable ISO / 1:1-Klon deines Systems als startfähige ISO
 Comment[de]=1:1-Klon deines Linux-Mint-Systems als startfähige ISO — mit einem Klick
 Exec=python3 {SYSTEM_ORDNER}/linux-mint-snapshot.py
@@ -518,7 +518,7 @@ exit $FEHLER
 
 # Klon-Modell: NUR echte Bremsen und Fallen bleiben draussen — alles andere ist 1:1.
 KLON_AUSSCHLUESSE = '''
-# Linux Mint Snapshot (Klon): nur Bremsen/Fallen ausschliessen, Rest bleibt 1:1
+# Rikus Mintshot (Klon): nur Bremsen/Fallen ausschliessen, Rest bleibt 1:1
 - /timeshift/*
 - /timeshift-btrfs/*
 - /swapfile
@@ -683,7 +683,7 @@ def menue_eintrag_anlegen():
     exec_zeile = f'Exec=python3 "{os.path.join(APP_ORDNER, "linux-mint-snapshot.py")}"'
     inhalt = f"""[Desktop Entry]
 Type=Application
-Name=Linux Mint Snapshot
+Name=Rikus Mintshot
 Comment=1:1 clone of your system as a bootable ISO / 1:1-Klon deines Systems als startfähige ISO
 Comment[de]=1:1-Klon deines Linux-Mint-Systems als startfähige ISO — mit einem Klick
 {exec_zeile}
@@ -726,7 +726,7 @@ def boot_vorlagen_fuellen():
 class SnapshotApp(Gtk.Window):
 
     def __init__(self, selbsttest=False):
-        super().__init__(title="Linux Mint Snapshot")
+        super().__init__(title="Rikus Mintshot")
         self.set_default_size(760, 700)
         self.set_border_width(14)
         self.icon_pfad = os.path.join(DATEN, 'icon.png')
@@ -756,7 +756,7 @@ class SnapshotApp(Gtk.Window):
 
         titel_zeile = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         titel = Gtk.Label()
-        titel.set_markup("<span size='x-large' weight='bold'>📸 Linux Mint Snapshot</span>\n"
+        titel.set_markup("<span size='x-large' weight='bold'>📸 Rikus Mintshot</span>\n"
                          f"<span size='small'>{GLib.markup_escape_text(T['untertitel'])}</span>\n"
                          f"<span size='small' style='italic'>{GLib.markup_escape_text(T['herausgeber'].format(v=VERSION))}</span>")
         titel.set_justify(Gtk.Justification.CENTER)
@@ -1009,7 +1009,7 @@ class SnapshotApp(Gtk.Window):
 
     def ueber_zeigen(self, *_args):
         d = Gtk.AboutDialog(transient_for=self, modal=True)
-        d.set_program_name("Linux Mint Snapshot")
+        d.set_program_name("Rikus Mintshot")
         d.set_version(VERSION)
         d.set_comments(T['untertitel'])
         d.set_license_type(Gtk.License.GPL_3_0)

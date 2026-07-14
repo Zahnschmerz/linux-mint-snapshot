@@ -15,4 +15,16 @@ if ! grep -q "^${LIVE_USER}:" /etc/passwd; then
         getent group "$G" >/dev/null 2>&1 && usermod -aG "$G" "$LIVE_USER" 2>/dev/null
     done
 fi
+
+# 2026-07-14 Fix Login-Schleife: Der Benutzer existiert schon (System-Klon), aber
+# sein Home FEHLT (Schnappschuss OHNE Homeverzeichnis). Dann ist das Passwort zwar
+# korrekt, aber ohne Home startet die Sitzung nicht -> zurueck zum Login (Loop).
+# Darum: fehlt das Home, ein frisches aus /etc/skel anlegen (richtige Besitzrechte).
+HOME_DIR=$(getent passwd "$LIVE_USER" | cut -d: -f6)
+if [ -n "$HOME_DIR" ] && [ "$HOME_DIR" != "/" ] && [ ! -d "$HOME_DIR" ]; then
+    mkdir -p "$HOME_DIR"
+    cp -aT /etc/skel "$HOME_DIR" 2>/dev/null || true
+    chown -R "$LIVE_USER":"$LIVE_USER" "$HOME_DIR" 2>/dev/null || true
+    chmod 700 "$HOME_DIR" 2>/dev/null || true
+fi
 exit 0
