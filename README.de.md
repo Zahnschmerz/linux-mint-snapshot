@@ -1,52 +1,69 @@
-# 📸 Linux Mint Snapshot
+# 📸 Rikus Mintshot
 
-**Erstellt mit einem Klick eine startfähige 1:1-Kopie deines laufenden Linux-Mint-Systems.**
-Ähnlich wie „MX Snapshot" auf MX Linux — nur dass es das für Linux Mint bisher
-nicht gab.
+**Ein bootfähiger Klon deines laufenden Linux-Mint-Systems — mit einem Klick.**
+Ähnlich dem, was „MX Snapshot" auf MX Linux macht — nur für Linux Mint, das kein
+eingebautes Gegenstück dafür hat.
 
-Herausgeber: Gilbert Rikus · Kostenlos, quelloffen (GPL-3.0) · Keine Werbung, kein Konto nötig.
+Herausgeber: Gilbert Rikus · Kostenlos und quelloffen (GPL-3.0) · Keine Werbung, keine Konten.
 
 *[English version: README.md](README.md)*
 
 ---
 
-## Was es kann
+## Was es macht
 
-- **Erstellt eine startfähige ISO** deines laufenden Systems mit einem Klick — deutscher Klartext-Fortschritt, kein Terminal.
-- **Immer ein 1:1-Klon**: dein Konto, deine Einstellungen und gespeicherten Anmeldungen sind dabei, damit nach der Installation alles wie gewohnt funktioniert. Große, verzichtbare Ordner (VMs, Steam, Flatpak) lassen sich per Häkchen ausschließen, um die ISO kleiner zu halten.
-- **Auf USB schreiben** über Mints eigenes Schreibprogramm.
-- **Eingebaute Bit-für-Bit-Kontrolle des Sticks** — kein Rätselraten, ob er gut geschrieben wurde.
-- **Der Stick startet direkt in dein eigenes Konto und deine Sprache** — kein anonymer Platzhalter-Nutzer.
-- **Startet auch mit eingeschaltetem Secure Boot** — die ISO enthält die von Microsoft signierte shim- und von Canonical signierte GRUB-Kette, startet also auf modernen PCs (z. B. mit Windows-Dualboot), *ohne* Secure Boot ausschalten zu müssen. Läuft mit an oder aus.
-- **Symbol „System installieren" direkt auf dem Live-Schreibtisch** (auf Basis von Calamares) übernimmt alles 1:1: keine Benutzer-Anlage, keine erneute Sprache/Zeitzone/Tastatur-Abfrage — es ist ja schon deins.
-- **Deutsche/englische Oberfläche**, automatisch nach Systemsprache.
+Rikus Mintshot verwandelt dein laufendes Linux Mint in eine bootfähige Live-ISO —
+mit einem Klick, in einfacher Sprache, ohne Terminal. Du wählst, **wie viel
+hineinkommt** — vom nackten System bis zum Voll-Klon:
+
+| Modus | Was drin ist | Wofür |
+|---|---|---|
+| **Nur System** | das nackte System, ohne dein Home | eine saubere Grundlage zum Weitergeben |
+| ⭐ **System + meine Einstellungen** | System **plus deine Einstellungen** — Desktop, Programme, Mails, Backup-Profile — aber **ohne** den Datenberg (Zwischenspeicher, Downloads, Medien, große Modell-Dateien) | ein schlankes System, das sofort brauchbar ist — **die empfohlene Standard-Wahl** |
+| **System + Home** | ein voller 1:1-Klon inklusive aller deiner Dateien | ein komplettes Backup / Umzug auf neue Hardware |
+
+Fortgeschrittene können genau festlegen, welche Ordner weggelassen werden.
+
+## Funktionen
+
+- **Ein Klick** — Fortschritt in einfacher Sprache (Schritt 1/2/3 + Prozent), kein Terminal.
+- **Auf USB-Stick schreiben** über Linux Mints eigenes Schreibprogramm, mit **eingebauter bit-genauer Kontrolle** — kein Rätselraten, ob der Stick in Ordnung ist.
+- **Der Live-Stick startet direkt in dein eigenes Konto und deine Sprache** — kein anonymer Platzhalter-Benutzer.
+- **Bootet auch mit eingeschaltetem Secure Boot** — die ISO trägt die Microsoft-signierte shim- + Canonical-signierte GRUB-Kette, so startet sie auf modernen PCs (z. B. mit Windows-Dualboot), *ohne* Secure Boot abzuschalten. Läuft mit an oder aus.
+- **Symbol „System installieren" direkt auf dem Live-Schreibtisch** (über Calamares) übernimmt 1:1: keine Benutzer-Anlage, keine erneute Eingabe von Sprache/Zeitzone/Tastatur — alles schon deins.
+- **Deutsche / englische Oberfläche**, automatisch nach deiner Systemsprache.
 
 ## Voraussetzungen
 
 | | |
 |---|---|
-| Betriebssystem | Linux Mint 22.x (Cinnamon getestet), x86_64 |
-| Freier Platz | ~2× die Größe deines installierten Systems |
+| System | Linux Mint 22.x (Cinnamon getestet), x86_64 |
+| Speicherplatz | ~2× deine Systemgröße, frei |
 | Internet | nur für die einmalige Ersteinrichtung |
-| Secure Boot | **wird unterstützt** — signierte shim-+-GRUB-Kette (Microsoft/Canonical); startet mit Secure Boot an *oder* aus, kein BIOS-Umstellen nötig |
+| Secure Boot | **unterstützt** — bootet mit an *oder* aus, keine BIOS-Änderung nötig |
 
 ## Erste Schritte
 
-1. Dieses Repository herunterladen oder klonen.
-2. `python3 linux-mint-snapshot.py` ausführen (oder im Dateimanager doppelklicken und „Ausführen" wählen).
-3. Beim ersten Start prüft die App, was fehlt (hauptsächlich das `refractasnapshot`-Werkzeug, nicht in Mints Standard-Quellen) und bietet an, es einzurichten — einmal Passwort, wenige Minuten.
-4. Auf **„Schnappschuss jetzt erstellen"** klicken. Vollständige Schritt-für-Schritt-Anleitung: **[ANLEITUNG.md](ANLEITUNG.md)**.
+**Am einfachsten — das .deb-Paket:** Lade `rikus-mintshot_*.deb` von der
+[Releases](https://github.com/Zahnschmerz/rikus-mintshot/releases)-Seite herunter und
+öffne es mit deiner Paketverwaltung (oder `sudo apt install ./rikus-mintshot_*.deb`).
+Danach **Rikus Mintshot** aus dem Anwendungsmenü starten.
 
-## Technik & Dank
+**Oder aus dem Quellcode:** `python3 rikus-mintshot.py` starten (oder doppelklicken und
+„Ausführen" wählen). Beim ersten Start prüft die App, was fehlt (vor allem der
+`refractasnapshot`-Motor, der nicht in Mints Standard-Quellen ist) und bietet an, es
+zu installieren — eine Passwort-Abfrage, ein paar Minuten.
 
-Baut auf bewährten, bestehenden Werkzeugen auf — dieses Projekt verbindet sie nur mit einer freundlichen Oberfläche:
+Ausführliche Schritt-für-Schritt-Anleitung: **[ANLEITUNG.md](ANLEITUNG.md)** (Deutsch) / **[GUIDE.md](GUIDE.md)** (English).
 
-- **[Refracta](https://sourceforge.net/projects/refracta/)** (refractasnapshot / refractainstaller) — der eigentliche Schnappschuss-/ISO-Bau-Motor.
+## Unter der Haube & Danksagung
+
+Aufgebaut auf bewährten, bestehenden Werkzeugen — dieses Projekt verbindet sie mit einer freundlichen Oberfläche:
+
+- **[Refracta](https://sourceforge.net/projects/refracta/)** (refractasnapshot / refractainstaller) — der eigentliche Motor zum Bauen der Schnappschuss-ISO.
 - **Debian `live-boot` / `live-config`** — die Live-Boot-Technik.
-- **[Calamares](https://calamares.io/)** — der grafische Installer, mit eigener 1:1-Klon-Konfiguration (keine Benutzer-/Sprache-/Tastatur-Seiten — alles kommt aus deinem Klon).
-
-Unterwegs umgeht diese App ein paar echte Stolperfallen: den Live-Benutzer, der still nicht angelegt wird, wenn seine übliche Nutzernummer schon vom geklonten Konto belegt ist, ein aktives Autologin, das in die Live-Sitzung überlebt, sowie englische Boot-Menüs unabhängig von der Systemsprache.
+- **[Calamares](https://calamares.io/)** — der grafische Installer, mit eigener Klon-Konfiguration (keine Benutzer-/Sprach-/Tastatur-Seiten — alles kommt aus deinem Klon).
 
 ## Lizenz
 
-GPL-3.0 — frei nutzbar, änderbar und weitergebbar, für immer. Siehe [LICENSE](LICENSE).
+GPL-3.0 — frei zu nutzen, studieren, teilen und ändern, für immer. Siehe [LICENSE](LICENSE).

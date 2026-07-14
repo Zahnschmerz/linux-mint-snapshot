@@ -1,8 +1,8 @@
-# 📸 Linux Mint Snapshot
+# 📸 Rikus Mintshot
 
-**A one-click, bootable 1:1 clone of your running Linux Mint installation.**
+**A one-click, bootable clone of your running Linux Mint installation.**
 Similar to what "MX Snapshot" does on MX Linux — this brings the same idea
-to Linux Mint, which doesn't have an equivalent tool built in.
+to Linux Mint, which has no built-in equivalent.
 
 Published by Gilbert Rikus · Free and open source (GPL-3.0) · No ads, no accounts.
 
@@ -12,13 +12,25 @@ Published by Gilbert Rikus · Free and open source (GPL-3.0) · No ads, no accou
 
 ## What it does
 
-- **Creates a bootable ISO** of your running Linux Mint system with one click — plain-language progress, no terminal in sight.
-- **Always a 1:1 clone**: your account, settings and saved logins are included, so the result works exactly like your original once installed. Large, disposable folders (VMs, Steam, Flatpak data) can be excluded via checkboxes to keep the ISO smaller.
-- **Write to USB** via Linux Mint's own image writer.
-- **Built-in bit-by-bit USB verification** — no guessing whether the stick is good.
+Rikus Mintshot turns your running Linux Mint into a bootable live ISO — with one
+click, plain-language progress, no terminal in sight. You choose **how much goes
+in**, from a bare system to a full clone:
+
+| Mode | What's included | Good for |
+|---|---|---|
+| **System only** | the bare system, no personal home | a clean base to hand on to others |
+| ⭐ **System + my settings** | system **plus your settings** — desktop, apps, mail, backup profiles — but **without** the data mountain (cache, downloads, media, large local model files) | a lean system that's usable right away — **the recommended default** |
+| **System + Home** | a full 1:1 clone including all your files | a complete backup / moving to new hardware |
+
+Advanced users can fine-tune exactly which folders to leave out.
+
+## Features
+
+- **One click** — plain-language progress (step 1/2/3 + percentage), no terminal.
+- **Write to USB** via Linux Mint's own image writer, with **built-in bit-by-bit verification** — no guessing whether the stick is good.
 - **The live stick boots straight into your own account and language** — no generic placeholder user.
 - **Boots with Secure Boot enabled** — the ISO carries the Microsoft-signed shim + Canonical-signed GRUB chain, so it starts on modern PCs (e.g. with a Windows dual-boot) *without* turning Secure Boot off. Works with it on or off.
-- **"Install System" icon right on the live desktop** (powered by Calamares) does a full 1:1 takeover: no user-creation step, no re-entering language/timezone/keyboard — it's all already yours.
+- **"Install System" icon right on the live desktop** (powered by Calamares) does a full takeover: no user-creation step, no re-entering language/timezone/keyboard — it's all already yours.
 - **German / English GUI**, chosen automatically from your system language.
 
 ## Requirements
@@ -28,24 +40,29 @@ Published by Gilbert Rikus · Free and open source (GPL-3.0) · No ads, no accou
 | OS | Linux Mint 22.x (Cinnamon tested), x86_64 |
 | Disk space | ~2× your installed system size, free |
 | Internet | only for the one-time first-run setup |
-| Secure Boot | **supported** — signed shim + GRUB chain (Microsoft/Canonical); boots with Secure Boot on *or* off, no BIOS changes needed |
+| Secure Boot | **supported** — boots with it on *or* off, no BIOS changes needed |
 
 ## Getting started
 
-1. Download or clone this repository.
-2. Run `python3 linux-mint-snapshot.py` (or double-click it in your file manager and choose "Run").
-3. On first start, the app checks what's missing (mainly the `refractasnapshot` engine, not in Mint's default repos) and offers to install it — one password prompt, a few minutes.
-4. Click **"Create snapshot now"**. Full step-by-step instructions: **[GUIDE.md](GUIDE.md)** (English) / **[ANLEITUNG.md](ANLEITUNG.md)** (Deutsch).
+**Easiest — the .deb package:** download `rikus-mintshot_*.deb` from the
+[Releases](https://github.com/Zahnschmerz/rikus-mintshot/releases) page and open it
+with your package installer (or run `sudo apt install ./rikus-mintshot_*.deb`).
+Then start **Rikus Mintshot** from your applications menu.
+
+**Or from source:** run `python3 rikus-mintshot.py` (or double-click it in your file
+manager and choose "Run"). On first start the app checks what's missing (mainly the
+`refractasnapshot` engine, which isn't in Mint's default repos) and offers to install
+it — one password prompt, a few minutes.
+
+Full step-by-step instructions: **[GUIDE.md](GUIDE.md)** (English) / **[ANLEITUNG.md](ANLEITUNG.md)** (Deutsch).
 
 ## Under the hood & credits
 
-Built on top of proven, existing tools — this project just wires them together with a friendly GUI:
+Built on top of proven, existing tools — this project wires them together with a friendly GUI:
 
 - **[Refracta](https://sourceforge.net/projects/refracta/)** (refractasnapshot / refractainstaller) — the actual snapshot/ISO-building engine.
 - **Debian `live-boot` / `live-config`** — the live-boot machinery.
-- **[Calamares](https://calamares.io/)** — the graphical installer, with a custom 1:1-clone configuration (no user/locale/keyboard pages — everything comes from your clone).
-
-Along the way this app works around a few real-world traps: the live user silently failing to get created when its usual UID is already taken by the cloned account, an active autologin surviving into the live session, and English-only boot menus regardless of system language.
+- **[Calamares](https://calamares.io/)** — the graphical installer, with a custom clone configuration (no user/locale/keyboard pages — everything comes from your clone).
 
 ## License
 
