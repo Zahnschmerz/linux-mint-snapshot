@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Linux Mint Snapshot – Hintergrundbild (Live)
+Name[de]=Linux Mint Snapshot – Hintergrundbild (Live)
+Comment=Forces the desktop wallpaper to render in the live session
+Comment[de]=Erzwingt das Hintergrundbild im Live-Betrieb
+Exec=/usr/local/bin/lms-hintergrund-setzen
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+OnlyShowIn=X-Cinnamon;

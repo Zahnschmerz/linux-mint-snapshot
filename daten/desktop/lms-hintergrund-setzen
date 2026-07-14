@@ -1,0 +1,36 @@
+#!/bin/sh
+# Linux Mint Snapshot — Desktop-Hintergrund im Live-Betrieb erzwingen.
+# Cinnamon zeichnet das Hintergrundbild beim Live-Login nicht immer zuverlaessig
+# aus dem bereits geladenen dconf des Benutzers. Dieser Autostart setzt es kurz
+# nach dem Login neu und erzwingt so das Neuzeichnen. Faellt auf das groesste Bild
+# in ~/Bilder zurueck, falls der gespeicherte Hintergrund fehlt.
+# Laeuft NUR im Live-Boot (im installierten System ueberfluessig -> beendet sich).
+# 2026-07-11 fuer "Linux Mint Snapshot" (Herausgeber: Gilbert Rikus)
+
+grep -q "boot=live" /proc/cmdline 2>/dev/null || exit 0
+
+# kurz warten, bis Cinnamon + dconf-Dienst vollstaendig hochgefahren sind
+sleep 5
+
+S="org.cinnamon.desktop.background"
+URI=$(gsettings get $S picture-uri 2>/dev/null | sed "s/^'//;s/'\$//")
+DATEI="${URI#file://}"
+
+# Fallback: wenn der gespeicherte Hintergrund fehlt, das groesste Bild aus ~/Bilder
+if [ -z "$DATEI" ] || [ ! -f "$DATEI" ]; then
+  DATEI=$(find "$HOME/Bilder" "$HOME/Pictures" -maxdepth 1 -type f \
+            \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) \
+            -printf '%s\t%p\n' 2>/dev/null | sort -rn | head -n1 | cut -f2-)
+fi
+[ -n "$DATEI" ] && [ -f "$DATEI" ] || exit 0
+
+OPT=$(gsettings get $S picture-options 2>/dev/null | sed "s/^'//;s/'\$//")
+{ [ -z "$OPT" ] || [ "$OPT" = "none" ]; } && OPT="zoom"
+
+# leeren + neu setzen erzwingt, dass Cinnamon das Bild frisch zeichnet
+gsettings set $S picture-uri "" 2>/dev/null
+sleep 1
+gsettings set $S picture-uri "file://$DATEI" 2>/dev/null
+gsettings set $S picture-options "$OPT" 2>/dev/null
+
+exit 0

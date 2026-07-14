@@ -460,6 +460,11 @@ install -m 0755 "{DATEN}/live-hooks/2000-installer-desktop-icon" /usr/lib/live/c
 mkdir -p /etc/skel/Desktop
 install -m 0755 "{DATEN}/desktop/system-installieren.desktop" /etc/skel/Desktop/
 
+# Desktop-Hintergrund im Live-Betrieb erzwingen (Cinnamon rendert ihn sonst nicht sauber aus dem geladenen dconf)
+mkdir -p /usr/local/bin /etc/xdg/autostart
+install -m 0755 "{DATEN}/desktop/lms-hintergrund-setzen" /usr/local/bin/lms-hintergrund-setzen
+install -m 0644 "{DATEN}/desktop/lms-hintergrund.desktop" /etc/xdg/autostart/lms-hintergrund.desktop
+
 # RAM-Persistenz: Save-Dienst ins System (greift NUR beim "Persistenz im RAM"-Boot-Modus)
 mkdir -p /usr/local/sbin /etc/systemd/system/multi-user.target.wants
 install -m 0755 "{DATEN}/persistenz/lms-persist-save" /usr/local/sbin/lms-persist-save

@@ -19,9 +19,27 @@ BASE=$(basename "$DEV")
 # muss die Snapshot-ISO tragen: Partition 1 = ISO9660
 if ! blkid "${DEV}1" 2>/dev/null | grep -qi 'iso9660'; then
   echo "FEHLER: Auf $DEV liegt keine Snapshot-ISO (ISO9660). Erst die ISO schreiben."; exit 1; fi
-# gibt es die Kiste schon?
-if blkid -L persistence 2>/dev/null | grep -q "^${DEV}"; then
-  echo "Auf $DEV existiert bereits eine Persistenz-Kiste — nichts zu tun."; exit 0; fi
+# gibt es die Kiste schon? Dann pruefen, ob sie VOLLSTAENDIG ist — sonst reparieren.
+# (Haeufigster Fehler: das Anlegen brach nach dem Formatieren ab, die Kiste blieb
+#  leer -> ohne persistence.conf/rw/work gibt es KEINE Persistenz. Hier heilen wir das.)
+EXIST=$(blkid -L persistence 2>/dev/null | grep "^${DEV}" | head -1 | cut -d: -f1)
+if [ -n "$EXIST" ]; then
+  MR=$(mktemp -d)
+  if mount "$EXIST" "$MR" 2>/dev/null; then
+    if [ -f "$MR/persistence.conf" ] && [ -d "$MR/rw" ] && [ -d "$MR/work" ]; then
+      umount "$MR"; rmdir "$MR"
+      echo "Auf $DEV existiert bereits eine vollstaendige Persistenz-Kiste — nichts zu tun."; exit 0
+    fi
+    # unvollstaendige/leere Kiste: die fehlende Konfiguration nachtragen (reparieren)
+    if [ "$MODUS" = "home" ]; then printf '/home union\n' > "$MR/persistence.conf"
+    else printf '/ union\n' > "$MR/persistence.conf"; fi
+    mkdir -p "$MR/rw" "$MR/work"
+    sync; umount "$MR"; rmdir "$MR"
+    echo "FERTIG: unvollstaendige Persistenz-Kiste auf $EXIST repariert (Modus $MODUS)."; exit 0
+  fi
+  rmdir "$MR" 2>/dev/null
+  echo "FEHLER: Kiste $EXIST ist vorhanden, laesst sich aber nicht einbinden."; exit 1
+fi
 
 # --- GPT-Backup ans Ende schieben (macht den freien Platz nutzbar) ---
 sgdisk -e "$DEV" >/dev/null 2>&1 || true
@@ -40,10 +58,25 @@ PART=$(lsblk -lnp -o NAME "$DEV" | grep -E "^${DEV}p?[0-9]+$" | sort -V | tail -
 mke2fs -F -q -t ext4 -L persistence "$PART" >/dev/null
 
 # --- persistence.conf hineinschreiben ---
+# WICHTIG: Direkt nach dem Formatieren re-scannt udev die Partition, sie ist
+# kurz "busy" -> ein sofortiger mount scheitert und die Kiste bliebe LEER
+# (kein persistence.conf/rw/work = keine Persistenz). Darum: warten + mehrfach
+# versuchen, und bei endgueltigem Fehlschlag hart abbrechen (nicht still leer lassen).
+udevadm settle 2>/dev/null || true
+sync
+partprobe "$DEV" 2>/dev/null || true
 M=$(mktemp -d)
-mount "$PART" "$M"
+_gemountet=0
+for _v in 1 2 3 4 5 6 7 8; do
+  if mount "$PART" "$M" 2>/dev/null; then _gemountet=1; break; fi
+  udevadm settle 2>/dev/null || true
+  sleep 1
+done
+[ "$_gemountet" = 1 ] || { echo "FEHLER: Kiste $PART liess sich nicht einbinden (Timing). Bitte erneut versuchen."; exit 1; }
 if [ "$MODUS" = "home" ]; then printf '/home union\n' > "$M/persistence.conf"
 else printf '/ union\n' > "$M/persistence.conf"; fi
+# overlayfs braucht diese Ordner auf der Kiste, sonst schlaegt der Persistenz-Boot fehl
+mkdir -p "$M/rw" "$M/work"
 sync
 umount "$M"; rmdir "$M"
 
