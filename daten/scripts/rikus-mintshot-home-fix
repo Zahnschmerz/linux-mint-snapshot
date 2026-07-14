@@ -1,0 +1,20 @@
+#!/bin/sh
+# Rikus Mintshot — legt fehlende Home-Verzeichnisse an (Klon OHNE Homeordner).
+# Laeuft beim Installieren (Calamares shellprocess) IM Ziel-System, nach dem
+# Kopieren. Ohne Home startet die Sitzung nicht -> Login-Schleife. Es wird ein
+# frisches Home aus /etc/skel mit korrekten Besitzrechten angelegt (keine
+# persoenlichen Daten — nur das leere Grundgeruest).
+#
+# Bewusst ein EIGENES Skript (nicht inline im shellprocess), weil Calamares die
+# $-Variablen im shellprocess-Befehl selbst als eigene Template-Variablen
+# missversteht ("fehlende Variablen") und die Installation dann scheitert.
+# 2026-07-14 Gilbert Rikus
+while IFS=: read -r benutzer x uid gid gecos heim shell; do
+    { [ "$uid" -ge 1000 ] && [ "$uid" -lt 60000 ]; } 2>/dev/null || continue
+    [ -n "$heim" ] && [ "$heim" != / ] && [ ! -d "$heim" ] || continue
+    mkdir -p "$heim"
+    cp -aT /etc/skel "$heim" 2>/dev/null || true
+    chown -R "$benutzer":"$benutzer" "$heim" 2>/dev/null || true
+    chmod 700 "$heim" 2>/dev/null || true
+done < /etc/passwd
+exit 0

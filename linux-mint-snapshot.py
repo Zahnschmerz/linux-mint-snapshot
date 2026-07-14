@@ -436,6 +436,9 @@ def fehlende_teile():
     for hook in ('0029-live-user-anlegen', '2000-installer-desktop-icon'):
         if not os.path.exists(f'/usr/lib/live/config/{hook}'):
             fehlt.append(f'Live-Baustein {hook}' if SPRACHE == 'de' else f'live component {hook}')
+    if not os.path.exists('/usr/local/sbin/rikus-mintshot-home-fix'):
+        fehlt.append('Home-Reparatur-Skript (Klon ohne Home)' if SPRACHE == 'de'
+                     else 'home-repair script (clone without home)')
     if not os.path.exists('/etc/skel/Desktop/system-installieren.desktop'):
         fehlt.append('Installer-Schreibtisch-Symbol' if SPRACHE == 'de' else 'installer desktop icon')
     if _system_app_version() != VERSION:
@@ -476,9 +479,14 @@ cp -r "{DATEN}/calamares/." /etc/calamares/
 B=/etc/calamares/branding/linuxmint/branding.desc
 [ -n "{ver}" ] && sed -i 's/22\\.3/{ver}/g' "$B"
 
-# Live-Bausteine (Schreibtisch-Symbol; 0029 ist beim Klon-Modell untaetig, bleibt als Reserve)
+# Live-Bausteine: 0029 legt beim Klon OHNE Home das fehlende Live-Home an (sonst Login-Schleife)
 install -m 0755 "{DATEN}/live-hooks/0029-live-user-anlegen" /usr/lib/live/config/
 install -m 0755 "{DATEN}/live-hooks/2000-installer-desktop-icon" /usr/lib/live/config/
+# Home-Reparatur fuers INSTALLIERTE System: legt beim Installieren fehlende Homes aus
+# /etc/skel an (Calamares-shellprocess ruft dieses Skript auf — als Datei, nicht inline,
+# weil Calamares $-Variablen im Befehl selbst als eigene Template-Variablen missversteht).
+mkdir -p /usr/local/sbin
+install -m 0755 "{DATEN}/scripts/rikus-mintshot-home-fix" /usr/local/sbin/
 mkdir -p /etc/skel/Desktop
 install -m 0755 "{DATEN}/desktop/system-installieren.desktop" /etc/skel/Desktop/
 
