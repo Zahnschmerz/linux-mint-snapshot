@@ -1,13 +1,15 @@
-# Linux Mint Snapshot — Guide (English)
+# Rikus Mintshot — Guide (English)
 
 **Published by Gilbert Rikus · License: GPL-3 · free of charge**
 *(Version and license text are always available in the app under „ℹ️ About".)*
 
-This program creates a bootable **1:1 clone** of your running Linux Mint
-system with one click — much like "MX Snapshot" does on MX Linux.
-Write the ISO to a USB stick, boot any PC from it, and **install** your
-system permanently with a double click — **including your account, your
-settings and saved logins.** After installing, everything works as before —
+This program creates a **bootable copy of your running Linux Mint system**
+with one click — much like "MX Snapshot" does on MX Linux. Write the ISO to a
+USB stick, boot any PC from it, and **install** your system permanently with a
+double click.
+
+**You decide how much comes along** — from the bare system to a full clone
+including all your files. After installing, everything works as before —
 nothing needs to be set up again.
 
 ---
@@ -17,56 +19,75 @@ nothing needs to be set up again.
 | | |
 |---|---|
 | Operating system | Linux Mint 22.x (Cinnamon tested) |
-| Free disk space | at least **25 GB** |
-| USB stick | at least as big as the finished ISO (often 8–20 GB, depends on your system) |
+| Free disk space | roughly **twice the size of your system** |
+| USB stick | at least as big as the finished ISO |
 | Internet | only for the one-time first setup |
 
 ---
 
 ## 2. Install the program
 
-1. Download and unpack the program (or copy the `linux-mint-snapshot`
-   folder) to a permanent place, for example:
-   `/home/YOURNAME/Programme/linux-mint-snapshot`
-2. Start it by **double-clicking `linux-mint-snapshot.py`** — Linux Mint
-   asks "Run?" the first time → choose **"Run"**.
-   (Alternatively in a terminal: `python3 linux-mint-snapshot.py`.)
-   From the first start on, the program stays in your **application menu**
-   as **"Linux Mint Snapshot"** (with its own camera icon).
-3. **On the very first start** the program checks whether all building
-   blocks are present. If something is missing, the button
-   **"🔧 Set up now"** appears:
-   - Click it → a list shows what will be installed.
-   - Confirm → your **password** is asked once (normal: system
-     components need administrative rights).
-   - Setup takes a few minutes and ends with **"✅ Setup complete"** —
-     done, this happens only once. This also installs the app into the
-     system itself, so it is included in every clone (like mx-snapshot
-     on MX Linux).
+**Easiest — the ready-made package:**
+
+1. Download `rikus-mintshot_*.deb` from the
+   [Releases page](https://github.com/Zahnschmerz/rikus-mintshot/releases).
+2. Double-click the file → your package manager opens → **"Install"**.
+   *(Or in a terminal: `sudo apt install ./rikus-mintshot_*.deb`)*
+3. Afterwards you'll find **Rikus Mintshot** in your **application menu**
+   (with its own camera icon).
+
+**Or from source:** unpack the folder and run `python3 rikus-mintshot.py`
+(or double-click it and choose "Run").
+
+**On the very first start** the program checks whether all building blocks are
+present. If something is missing, the button **"🔧 Set up now"** appears:
+
+- Click it → a list shows what will be installed.
+- Confirm → your **password** is asked once (normal: system components need
+  administrative rights).
+- Setup takes a few minutes and ends with **"✅ Setup complete"** — done, this
+  happens only once. This also installs the app into the system itself, so it is
+  included in every snapshot (like mx-snapshot on MX Linux).
 
 ---
 
 ## 3. Create a snapshot (ISO)
 
-1. Open the program. The snapshot is **always a 1:1 clone**: your account,
-   settings and saved logins are ALWAYS included. You can only **leave out
-   big folders** to make the ISO smaller (checked = stays out): virtual
-   machines, Steam games, Flatpak app data. Everything else (documents,
-   pictures, browser profiles, mail apps, saved passwords …) is always in.
+### First: how much should come along?
 
-   🔒 **Important, because it's always a 1:1 clone:** every ISO you create
-   contains your account and credentials. Keep the stick in a safe place
-   and never hand it to strangers!
+In the main window you choose — with one click — between three options:
 
-2. Click **"📸 Create snapshot now"**.
-3. The program works in **3 steps** (with a progress bar):
+| Choice in the program | What's included | What it's for |
+|---|---|---|
+| **System (root) only**<br>*— bare, without your settings* | just the system itself — **no** home directory, no accounts, no data | a clean base you can **safely pass on to others** |
+| ⭐ **System + my settings**<br>*— lean & ready to use (recommended)* | the system **plus your settings**: desktop, applications, mail, browser, saved logins — **without** the bulk (caches, downloads, pictures, videos, music) | **the recommended choice:** small, yet ready to use — everything set up the way you know it |
+| **System + Home**<br>*— everything (your files, mail & account)* | **truly everything** — a full 1:1 clone including all your files | a complete backup, or moving to a new machine |
+
+**If you're unsure:** take the middle option (⭐ **System + my settings**).
+It is preselected and right for most people.
+
+> 🔒 **Important for the lower two options:** As soon as your settings or files
+> come along, the ISO contains **your account and your saved credentials**. Keep
+> such sticks in a safe place and **never hand them to strangers!** Only
+> **"System (root) only"** is free of personal data.
+
+**Advanced:** Under **"⚙️ Advanced: leave out individual folders"** you can
+additionally decide exactly what stays out (checked = stays out) — for example
+virtual machines or Steam games. **"➕ Leave out another folder …"** adds any
+folder you like.
+
+### Then: build the snapshot
+
+1. Click **"📸 Create snapshot now"**.
+2. The program works in **3 steps** (with a progress bar):
    - Step 1: copying the system *(longest part)*
    - Step 2: compressing *(with percentage)*
    - Step 3: building the bootable ISO
-   - **Total: about 15–25 minutes.** You may keep working; even closing
-     the window does not stop the build.
-4. At the end you get **"✅ Snapshot finished!"** — the ISO appears in
-   the "Finished images" list.
+   - **Total: about 15–25 minutes** (depending on your choice above and your
+     machine). You may keep working; even closing the window does not stop
+     the build.
+3. At the end you get **"✅ Snapshot finished!"** — the ISO appears in the
+   "Finished images" list.
 
 ---
 
@@ -94,10 +115,10 @@ nothing needs to be set up again.
    (on some machines **F2**, **F8**, **F10** or **Esc**).
 3. Choose the **USB stick** from the list.
 4. Pick the **first entry** of the start menu (shown in your own language).
-5. After 1–2 minutes the desktop appears — **your own desktop**: the live
-   system boots straight into **your own user account** (no placeholder
-   user), with your icons, settings and apps, exactly as you know it.
-   Nothing on your real computer changes unless you install.
+5. After 1–2 minutes the desktop appears. If you took **your settings** along,
+   the live system boots straight into **your own user account** — with your
+   icons and apps, exactly as you know it. Nothing on your real computer
+   changes unless you install.
 
 > ✅ **Secure Boot:** the stick starts **even with Secure Boot enabled** —
 > you don't need to change anything in the BIOS. The ISO carries a
@@ -118,21 +139,30 @@ The live desktop shows the icon **"Install System"**:
 4. **Summary**: read it once more → **"Install"** → confirm the
    safety question with **"Install now"**.
    *(There is deliberately NO separate page for language/timezone/keyboard/
-   user — all of that is taken 1:1 from your clone, nothing to type in.)*
+   user — all of that is taken from your snapshot, nothing to type in.)*
 5. Installation takes **about 10 minutes**, then: **"All done."**
 6. Restart and **remove the stick during reboot** — your freshly
    installed Linux Mint starts from the hard disk.
 7. Log in with **your own, familiar account and password** — NO new
-   account is created; the installed system is a 1:1 copy of your
-   original (the installer icon and live-session leftovers are removed
-   automatically).
+   account is created (the installer icon and live-session leftovers are
+   removed automatically).
+
+> ⚠️ **Space on the target disk:** the disk you install onto must be **at least
+> as large as your snapshot when unpacked** — with "System + Home" that can be
+> considerably more than the ISO file suggests. If the disk is too small, the
+> installation aborts.
 
 ---
 
 ## 8. FAQ
 
-**How big is the ISO?**  Depends on your system — usually in the 8–20 GB
-range. The VM/Steam/Flatpak checkboxes let you shrink it.
+**Which option should I pick?**  When in doubt, the middle one:
+**"System + my settings"**. It's preselected, stays lean and is still ready to
+use — everything set up the way you know it.
+
+**How big is the ISO?**  That mainly depends on your choice: "System only" is
+smallest, "System + Home" largest. The checkboxes under "Advanced" can save
+additional space.
 
 **Stick does not boot?**  Wrong boot-menu key (try F12/F2/F8/Esc),
 or re-write and verify the stick (step 5). (Secure Boot does NOT need to
@@ -141,9 +171,10 @@ be turned off — the ISO is signed.)
 **May I close the window during a build?**  Yes. The build continues
 in the background; reopening the app re-attaches the display.
 
-**What about my mail/passwords?**  They are always included — the
-snapshot is a 1:1 clone. That is exactly why you should keep the stick
-safe and never hand it to strangers!
+**What about my mail/passwords?**  You decide that with the choice above: with
+**"System (root) only"** nothing personal is included. With the other two, your
+account and saved credentials come along — keep such sticks safe and never hand
+them to strangers!
 
 **Where do I find the version and license?**  Click **"ℹ️ About"** at
 the top of the program window — shows version, publisher and the full
