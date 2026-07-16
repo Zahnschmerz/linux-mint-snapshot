@@ -469,6 +469,9 @@ def fehlende_teile():
     if not os.path.exists('/usr/local/sbin/rikus-mintshot-home-fix'):
         fehlt.append('Home-Reparatur-Skript (Klon ohne Home)' if SPRACHE == 'de'
                      else 'home-repair script (clone without home)')
+    if not os.path.exists('/usr/local/sbin/rikus-mintshot-persist-save'):
+        fehlt.append('Persistenz-Speicherdienst (RAM-Modus)' if SPRACHE == 'de'
+                     else 'persistence save service (RAM mode)')
     if not os.path.exists('/etc/skel/Desktop/system-installieren.desktop'):
         fehlt.append('Installer-Schreibtisch-Symbol' if SPRACHE == 'de' else 'installer desktop icon')
     if _system_app_version() != VERSION:
