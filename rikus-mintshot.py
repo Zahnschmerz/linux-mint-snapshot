@@ -25,6 +25,7 @@ import json
 import getpass
 import shutil
 import subprocess
+import shlex
 import threading
 import datetime
 
@@ -42,7 +43,28 @@ PID_DATEI = os.path.join(KONFIG_ORDNER, 'lauf.pid')
 EINRICHT_LOG = os.path.join(KONFIG_ORDNER, 'einrichtung.log')
 WEGLASSEN_DATEI = os.path.join(KONFIG_ORDNER, 'weglassen.json')
 ZUSATZ_DATEI = os.path.join(KONFIG_ORDNER, 'zusatz-ordner.json')
-ISO_ORDNER = '/home/snapshot'
+ABLAGE_DATEI = os.path.join(KONFIG_ORDNER, 'ablageort.txt')
+ABLAGE_STANDARD = '/home'                    # darunter entstehen snapshot/ und work/
+ISO_ORDNER = os.path.join(ABLAGE_STANDARD, 'snapshot')   # Standard; per Ablageort aenderbar
+
+
+def ablage_basis():
+    """Gewaehlter Ablage-Basisordner (darunter snapshot/ + work/). Faellt auf /home
+    zurueck, wenn nichts gespeichert ist oder der gemerkte Ort nicht mehr da ist."""
+    try:
+        with open(ABLAGE_DATEI) as f:
+            ort = f.read().strip()
+        if ort and os.path.isdir(ort):
+            return ort
+    except OSError:
+        pass
+    return ABLAGE_STANDARD
+
+
+def ablage_ordner(basis=None):
+    """(iso_ordner, work_ordner) fuer eine gegebene oder die gespeicherte Basis."""
+    b = basis or ablage_basis()
+    return os.path.join(b, 'snapshot'), os.path.join(b, 'work')
 REFRACTA_DEB_URL = ('https://master.dl.sourceforge.net/project/refracta/tools/'
                     'refractasnapshot-base_10.2.12_all.deb?viasf=1')
 CALA_MARKER = 'lms-config-v5'
@@ -135,6 +157,8 @@ T_ALLE = {
   'knopf_persist': "💾 Persistenz einrichten",
   'knopf_loesch': "🗑️ Löschen",
   'ablage': "Ablageort: <b>{ordner}</b>   ·   Freier Platz: <b>{platz}</b>",
+  'knopf_ablage': "📁 Ablageort ändern …",
+  'ablage_tooltip': "Wähle, auf welcher Platte der Klon gebaut wird — z. B. eine zweite Festplatte mit mehr Platz.",
   'erst_auswaehlen_titel': "Bitte erst auswählen",
   'auswahl_schreiben': "Wähle in der Liste die ISO aus, die auf den Stick soll.",
   'auswahl_pruefen': "Wähle in der Liste die ISO aus, mit der der Stick verglichen werden soll.",
@@ -235,6 +259,8 @@ T_ALLE = {
   'knopf_persist': "💾 Set up persistence",
   'knopf_loesch': "🗑️ Delete",
   'ablage': "Location: <b>{ordner}</b>   ·   Free space: <b>{platz}</b>",
+  'knopf_ablage': "📁 Change location …",
+  'ablage_tooltip': "Choose which drive the clone is built on — e.g. a second disk with more room.",
   'erst_auswaehlen_titel': "Please select first",
   'auswahl_schreiben': "Select the ISO in the list that should go onto the stick.",
   'auswahl_pruefen': "Select the ISO in the list to compare the stick against.",
@@ -587,16 +613,20 @@ def secure_boot_moeglich():
     return (os.path.exists(_shim_pfad()) and os.path.exists(GRUB_SIGNED)
             and os.path.exists(ISOHDPFX) and shutil.which('mformat') is not None)
 
-def secure_boot_nachbau_bash():
+def secure_boot_nachbau_bash(iso_ordner=None, work_ordner=None):
     """Bash-Schnipsel (laeuft als root DIREKT nach refractasnapshot): ersetzt das
     selbstgebaute, UNSIGNIERTE EFI durch die fertig signierte Kette
     shim -> GRUB -> (Mint-)Kernel und packt die ISO mit einer echten EFI-System-
     Partition neu. Ergebnis bootet auch mit eingeschaltetem Secure Boot.
-    Ist idempotent + selbstsichernd: fehlt etwas, bleibt die normale ISO unveraendert."""
+    Ist idempotent + selbstsichernd: fehlt etwas, bleibt die normale ISO unveraendert.
+    iso_ordner/work_ordner MUESSEN zum gewaehlten Ablageort passen (sonst findet der
+    Nachbau die frische ISO nicht + raeumt den falschen Ordner auf)."""
     shim = _shim_pfad()
+    if iso_ordner is None or work_ordner is None:
+        iso_ordner, work_ordner = ablage_ordner()
     return f'''
 # ===== Secure-Boot-Nachbau =====
-SB_WORK="/home/work"; SB_ISOROOT="$SB_WORK/iso"; SB_SNAP="{ISO_ORDNER}"
+SB_WORK="{work_ordner}"; SB_ISOROOT="$SB_WORK/iso"; SB_SNAP="{iso_ordner}"
 SB_SHIM="{shim}"; SB_GRUB="{GRUB_SIGNED}"; SB_MM="{MOKMANAGER}"; SB_PFX="{ISOHDPFX}"
 if [ -d "$SB_ISOROOT/isolinux" ] && [ -f "$SB_SHIM" ] && [ -f "$SB_GRUB" ] && command -v mformat >/dev/null; then
   SB_ISO="$(ls -t "$SB_SNAP"/*.iso 2>/dev/null | head -1)"
@@ -639,11 +669,14 @@ rm -rf "$SB_WORK" 2>/dev/null || true
 echo "All finished!"
 '''
 
-def konfig_anlegen(weglassen=None, modus='voll'):
+def konfig_anlegen(weglassen=None, modus='voll', iso_ordner=None, work_ordner=None):
     """Klon-Konfiguration frisch schreiben (kein Root noetig). weglassen = Liste
     absoluter Ordner-Pfade, deren INHALT draussen bleibt (Haekchen).
     modus: 'ohne' = ganzes /home raus (nacktes System); 'einstellungen' = Home BLEIBT,
-    aber der grosse Datenberg raus (schlank + brauchbar); 'voll' = 1:1-Klon mit allem."""
+    aber der grosse Datenberg raus (schlank + brauchbar); 'voll' = 1:1-Klon mit allem.
+    iso_ordner/work_ordner = gewaehlter Ablageort (Default: gespeicherte Ablage)."""
+    if iso_ordner is None or work_ordner is None:
+        iso_ordner, work_ordner = ablage_ordner()
     os.makedirs(KONFIG_ORDNER, exist_ok=True)
     basis_conf = '/etc/refractasnapshot.conf'
     basis_liste = '/usr/lib/refractasnapshot/snapshot_exclude.list'
@@ -692,7 +725,9 @@ def konfig_anlegen(weglassen=None, modus='voll'):
     ersetzungen = {
         'snapshot_excludes': f'"{liste_pfad}"',
         'snapshot_basename': f'"{DISTRO_KURZ}-Klon"',
-        'snapshot_dir': f'"{ISO_ORDNER}"',           # ISO landet DORT, wo die App sie sucht
+        'snapshot_dir': f'"{iso_ordner}"',           # ISO landet DORT, wo die App sie sucht
+        'work_dir': f'"{work_ordner}"',              # grosse Systemkopie -> gewaehlter Ablageort
+        'efi_work': f'"{work_ordner}/efi-files"',    # EFI-Arbeitsordner mit umziehen
         'kernel_image': f'"{KONFIG_ORDNER}/vmlinuz"',
         'initrd_image': f'"{KONFIG_ORDNER}/initrd.img"',
         'make_sha256sum': '"yes"',
@@ -788,8 +823,11 @@ class SnapshotApp(Gtk.Window):
             self.set_icon_from_file(self.icon_pfad)
 
         self.selbsttest = selbsttest
-        self.iso_ordner = os.environ.get('MINT_SNAP_TESTORDNER', ISO_ORDNER) \
-            if selbsttest else ISO_ORDNER
+        if selbsttest:
+            self.iso_ordner = os.environ.get('MINT_SNAP_TESTORDNER', ISO_ORDNER)
+            self.work_ordner = os.path.join(os.path.dirname(self.iso_ordner), 'work')
+        else:
+            self.iso_ordner, self.work_ordner = ablage_ordner()
         self.root = root_praefix()
         self.bau_pid = None
         self.lauf_aktiv = False
@@ -826,8 +864,15 @@ class SnapshotApp(Gtk.Window):
         titel_zeile.pack_start(self.knopf_ueber, False, False, 0)
         haupt.pack_start(titel_zeile, False, False, 0)
 
+        info_zeile = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         self.info_label = Gtk.Label()
-        haupt.pack_start(self.info_label, False, False, 0)
+        self.info_label.set_halign(Gtk.Align.START)
+        info_zeile.pack_start(self.info_label, True, True, 0)
+        self.knopf_ablage = Gtk.Button(label=T['knopf_ablage'])
+        self.knopf_ablage.set_tooltip_text(T['ablage_tooltip'])
+        self.knopf_ablage.connect('clicked', self.ablageort_waehlen)
+        info_zeile.pack_start(self.knopf_ablage, False, False, 0)
+        haupt.pack_start(info_zeile, False, False, 0)
 
         rahmen = Gtk.Frame(label=T['frame_auswahl'])
         box_wahl = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
@@ -967,6 +1012,47 @@ class SnapshotApp(Gtk.Window):
             GLib.timeout_add(1200, self._selbsttest_start)
 
     # ================= Hilfen =================
+
+    def ablageort_waehlen(self, _knopf):
+        de = SPRACHE == 'de'
+        dlg = Gtk.FileChooserDialog(
+            title=("Ablageort wählen — auf welcher Platte soll gebaut werden?" if de
+                   else "Choose location — which drive to build on?"),
+            transient_for=self, action=Gtk.FileChooserAction.SELECT_FOLDER)
+        dlg.add_button('Abbrechen' if de else 'Cancel', Gtk.ResponseType.CANCEL)
+        dlg.add_button('Wählen' if de else 'Choose', Gtk.ResponseType.OK)
+        start = ablage_basis()
+        if os.path.isdir(start):
+            dlg.set_current_folder(start)
+        if dlg.run() == Gtk.ResponseType.OK:
+            basis = dlg.get_filename()
+            dlg.destroy()
+            # Schreibbarkeit pruefen — sonst scheitert der Bau spaeter kryptisch
+            probe = os.path.join(basis, '.rikus-mintshot-schreibtest')
+            try:
+                os.makedirs(basis, exist_ok=True)
+                with open(probe, 'w') as f:
+                    f.write('x')
+                os.remove(probe)
+            except OSError:
+                self.melde(Gtk.MessageType.ERROR,
+                           'Kein Schreibrecht' if de else 'Not writable',
+                           (f"In »{basis}« darf nicht geschrieben werden.\n"
+                            "Bitte einen anderen Ordner wählen (z. B. auf einer\n"
+                            "zweiten Festplatte, die dir gehört).") if de else
+                           (f"Cannot write to “{basis}”.\nPlease pick another folder "
+                            "(e.g. on a second drive you own)."))
+                return
+            try:
+                os.makedirs(KONFIG_ORDNER, exist_ok=True)
+                with open(ABLAGE_DATEI, 'w') as f:
+                    f.write(basis)
+            except OSError:
+                pass
+            self.iso_ordner, self.work_ordner = ablage_ordner(basis)
+            self.liste_aktualisieren()
+        else:
+            dlg.destroy()
 
     def _freier_platz(self):
         # den Platz DORT messen, wo die ISO hinkommt (bei getrenntem /home wichtig)
@@ -1182,6 +1268,48 @@ class SnapshotApp(Gtk.Window):
             return
         self.root = root_praefix()   # JETZT bestimmen: ein sudo-Zeitstempel vom Start kann abgelaufen sein
         os.makedirs(self.iso_ordner, exist_ok=True)
+
+        # Platz-Warnung VOR dem Bau: laeuft die Platte MITTEN im Bau voll, bricht refractasnapshot
+        # ab und hinterlaesst eine unvollstaendige ISO + eine LEERE Pruefsummen-Datei -> spaeter
+        # meldet "Stick kontrollieren" faelschlich einen Fehler. Lieber vorher ehrlich warnen.
+        if not self.selbsttest:
+            try:
+                st_z = os.statvfs(self.iso_ordner if os.path.isdir(self.iso_ordner) else '/')
+                frei = st_z.f_bavail * st_z.f_frsize
+                st_s = os.statvfs('/')
+                belegt = (st_s.f_blocks - st_s.f_bfree) * st_s.f_frsize
+                # Faustregel: ein Klon braucht grob so viel wie das System belegt. Bei "Nur System"
+                # oder abgewaehlten Ordnern weniger -> deshalb nur WARNEN, nicht blockieren.
+                if frei < belegt:
+                    de = SPRACHE == 'de'
+                    dlg = Gtk.MessageDialog(
+                        transient_for=self, modal=True, message_type=Gtk.MessageType.WARNING,
+                        buttons=Gtk.ButtonsType.OK_CANCEL,
+                        text=("Es könnte zu wenig Speicherplatz sein" if de
+                              else "There may be too little disk space"))
+                    dlg.format_secondary_text(
+                        (f"Freier Platz am Ablageort: {groesse_lesbar(frei)}\n"
+                         f"Dein System belegt etwa:   {groesse_lesbar(belegt)}\n\n"
+                         "Ein Klon braucht ungefähr so viel Platz wie dein System belegt. Läuft\n"
+                         "der Platz während des Baus aus, bricht er ab — die ISO wird dann\n"
+                         "unbrauchbar.\n\n"
+                         "Tipp: große Ordner abwählen, einen schlankeren Modus wählen, oder den\n"
+                         "Ablageort auf eine Platte mit mehr Platz legen (Knopf „Ablageort“).\n\n"
+                         "Trotzdem fortfahren?") if de else
+                        (f"Free space at destination: {groesse_lesbar(frei)}\n"
+                         f"Your system uses roughly:  {groesse_lesbar(belegt)}\n\n"
+                         "A clone needs roughly as much space as your system uses. If space\n"
+                         "runs out during the build, it aborts — the ISO becomes unusable.\n\n"
+                         "Tip: deselect large folders, pick a leaner mode, or put the destination\n"
+                         "on a drive with more room (“Location” button).\n\n"
+                         "Continue anyway?"))
+                    antwort = dlg.run()
+                    dlg.destroy()
+                    if antwort != Gtk.ResponseType.OK:
+                        return
+            except Exception:
+                pass   # Platz-Check ist reiner Komfort — nie den Bau daran scheitern lassen
+
         weglassen = [pfad for pfad, cb in self.haekchen.items() if cb.get_active()]
         try:
             os.makedirs(KONFIG_ORDNER, exist_ok=True)
@@ -1196,7 +1324,7 @@ class SnapshotApp(Gtk.Window):
                 modus = 'einstellungen'
             else:
                 modus = 'voll'
-            if not konfig_anlegen(weglassen, modus):
+            if not konfig_anlegen(weglassen, modus, self.iso_ordner, self.work_ordner):
                 self.melde(Gtk.MessageType.ERROR, T['konfig_fehlt'],
                            '/etc/refractasnapshot.conf')
                 return
@@ -1226,7 +1354,7 @@ class SnapshotApp(Gtk.Window):
                 # Nachbau in eine Datei schreiben (haelt Anfuehrungszeichen aus dem Aufruf raus)
                 sb_skript = os.path.join(KONFIG_ORDNER, 'secure-boot-nachbau.sh')
                 with open(sb_skript, 'w') as f:
-                    f.write('#!/bin/bash\n' + secure_boot_nachbau_bash())
+                    f.write('#!/bin/bash\n' + secure_boot_nachbau_bash(self.iso_ordner, self.work_ordner))
                 innen += f' && bash "{sb_skript}"'  # nur bei ERFOLGREICHEM refracta-Bau
             kern_befehl = f"{self.root} bash -c '{innen}'"
 
@@ -1416,7 +1544,9 @@ class SnapshotApp(Gtk.Window):
         if pid:
             teile.append(f'kill -KILL -{pid} 2>/dev/null')
         teile.append('for r in $(pgrep -f refractasnapshot 2>/dev/null); do kill -KILL -"$r" 2>/dev/null; done')
-        teile.append('rm -rf /home/work')
+        wo = self.work_ordner
+        if wo and wo.startswith('/') and wo.rstrip('/').count('/') >= 1 and wo.rstrip('/') not in ('/home', '/tmp', '/var', '/usr'):
+            teile.append(f'rm -rf {shlex.quote(wo)}')   # nur den app-eigenen work-Ordner, nie einen Systempfad
         subprocess.run(self.root.split() + ['bash', '-c', '; '.join(teile)], check=False)
         self.setze_phase(T['abgebrochen'])
 
@@ -1478,16 +1608,41 @@ done'''], timeout=25, check=False)
             for endung, wz in (('.sha256', 'sha256sum'), ('.md5', 'md5sum')):
                 if os.path.exists(iso + endung):
                     with open(iso + endung) as f:
-                        soll, werkzeug = f.read().split()[0], wz
-                    break
+                        felder = f.read().split()
+                    if felder:                       # Datei hat Inhalt -> erste Spalte = Soll-Summe
+                        soll, werkzeug = felder[0], wz
+                        break
+                    # LEERE Pruefsummen-Datei: entsteht, wenn der ISO-Bau abbrach (z. B. Platte
+                    # voll) — 'sha256sum ISO > ISO.sha256' legt die Datei an, BEVOR die Summe da
+                    # ist. NICHT abstuerzen: unten die Summe direkt aus der ISO berechnen.
             if soll is None:
-                soll = subprocess.run(['bash', '-c', f'sha256sum "{iso}"'],
-                                      capture_output=True, text=True).stdout.split()[0]
+                erg = subprocess.run(['bash', '-c', f'{werkzeug} "{iso}"'],
+                                     capture_output=True, text=True).stdout.split()
+                if not erg:
+                    de = SPRACHE == 'de'
+                    self.melde(Gtk.MessageType.ERROR, T['pruef_fehler'],
+                               ("Die Prüfsumme der ISO lässt sich nicht berechnen — ist die\n"
+                                "ISO-Datei vollständig? (Ein abgebrochener Bau, etwa wegen zu wenig\n"
+                                "Speicherplatz, hinterlässt eine unvollständige ISO.)") if de else
+                               ("Cannot compute the ISO's checksum — is the ISO file complete?\n"
+                                "(An aborted build, e.g. due to low disk space, leaves an\n"
+                                "incomplete ISO.)"))
+                    return
+                soll = erg[0]
 
-            ist = subprocess.run(
+            roh = subprocess.run(
                 self.root.split() + ['bash', '-c',
                                      f'head -c {groesse} {geraet_pfad} | {werkzeug}'],
-                capture_output=True, text=True).stdout.split()[0]
+                capture_output=True, text=True).stdout.split()
+            if not roh:                              # Lesen vom Stick fehlgeschlagen (Rechte, Geraet weg)
+                de = SPRACHE == 'de'
+                self.melde(Gtk.MessageType.ERROR, T['pruef_fehler'],
+                           ("Der Stick lässt sich nicht lesen. Steckt er noch? Wurde die\n"
+                            "Passwort-Abfrage bestätigt?") if de else
+                           ("Cannot read the stick. Is it still plugged in? Was the password\n"
+                            "prompt confirmed?"))
+                return
+            ist = roh[0]
 
             if ist == soll:
                 self.melde(Gtk.MessageType.INFO, T['stick_ok_titel'],
