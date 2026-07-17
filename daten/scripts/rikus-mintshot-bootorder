@@ -1,0 +1,114 @@
+#!/bin/bash
+# rikus-mintshot-bootorder — setzt den EIGENEN Start-Eintrag in der Firmware nach vorn.
+#
+# WARUM (am echten Geraet bewiesen, asus ROG G712LV, 17.07.2026):
+# Bei Dualboot mit MEHREREN Platten steht der "Windows Boot Manager" oft an Platz 1
+# der Firmware-Startliste (BootOrder). Die Firmware nimmt IMMER Platz 1 — also startet
+# der Rechner nach der Installation weiter Windows, obwohl Mint sauber installiert ist.
+# Die Platten-Reihenfolge im BIOS hilft dabei NICHT: die BootOrder ist eine Ebene darueber.
+#   Vorher:  BootOrder: 0000,0001   (0000=Windows, 0001=unser Mint)  -> startet Windows
+#   Nachher: BootOrder: 0001,0000                                    -> startet Mint, Windows im Menue
+#
+# ⭐ WANN DAS LAEUFT — und warum das der Kern der Sache ist (17.07.2026 bewiesen):
+# Frueher lief dieses Skript WAEHREND der Installation (Calamares-Schritt nach "bootloader").
+# Das kann NICHT funktionieren. Der Beweis steht in Gilberts Protokoll:
+#     15:27:19  kein eigener Boot-Eintrag fuer /dev/nvme1n1p1 gefunden - uebersprungen.
+# Danach, im laufenden System, war der Eintrag da — mit exakt der gesuchten Kennung:
+#     /dev/nvme1n1p1  PARTUUID="ca016c6a-4af7-48a7-bcd4-e388bab23a95"
+#     Boot0001* ubuntu HD(1,GPT,ca016c6a-4af7-48a7-bcd4-e388bab23a95,...)/File(\EFI\UBUNTU\SHIMX64.EFI)
+# ➜ Der Firmware-Eintrag entsteht ERST BEIM ERSTEN START, nicht bei der Installation.
+#   Man kann nichts nach vorn setzen, was es noch nicht gibt.
+# ➜ DESHALB laeuft dieses Skript jetzt als EINMALIGER DIENST beim ersten Start des
+#   installierten Systems (rikus-mintshot-bootorder.service) — dort existiert der Eintrag.
+#   Es schaltet sich danach selbst ab.
+#
+# Sicherheit: aendert NUR die Reihenfolge. Loescht keinen Eintrag, legt keinen an.
+# Windows bleibt vollstaendig erhalten und erscheint via os-prober im GRUB-Menue.
+# Bei jedem Zweifel: sauber aussteigen, nichts anfassen.
+set -u
+
+# --- Protokoll ------------------------------------------------------------
+# WARUM eine eigene Datei: Calamares laeuft im LIVE-System vom Stick und schreibt
+# sein Protokoll dorthin — das lebt nur im Arbeitsspeicher und ist nach dem Neustart
+# WEG. Am 17.07.2026 stand deshalb nicht feststellbar, warum dieses Skript bei der
+# Installation nicht griff (von Hand lief es einwandfrei). Diese Datei liegt im
+# ZIELSYSTEM und ueberlebt den Neustart — sie ist die einzige Spur, die bleibt.
+LOG=/var/log/rikus-mintshot-bootorder.log
+sag() {
+    echo "rikus-mintshot-bootorder: $*"
+    { printf '%s  %s\n' "$(date '+%F %T' 2>/dev/null || echo '?')" "$*" >> "$LOG"; } 2>/dev/null || true
+}
+
+# --- Selbstabschaltung ----------------------------------------------------
+# Die Boot-Reihenfolge muss nur EINMAL gerichtet werden. Ist das Ziel erreicht,
+# schaltet sich der Dienst ab und laeuft bei keinem Start mehr mit.
+# Bleibt der Versuch erfolglos, schalten wir NICHT ab -> naechster Start probiert erneut
+# (z.B. falls die Firmware/Windows die Reihenfolge doch einmal zurueckgesetzt hat).
+fertig() {
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl disable rikus-mintshot-bootorder.service >/dev/null 2>&1 \
+            && sag "Ziel erreicht - Dienst abgeschaltet (laeuft nie wieder)." \
+            || sag "Ziel erreicht (Dienst liess sich nicht abschalten - unschaedlich)."
+    fi
+}
+
+sag "=== Start (aufgerufen als $(id -un 2>/dev/null), PWD=$PWD) ==="
+
+# Nur auf EFI-Systemen sinnvoll (BIOS/Legacy kennt keine BootOrder)
+[ -d /sys/firmware/efi ] || { sag "kein EFI-System - nichts zu tun."; exit 0; }
+command -v efibootmgr >/dev/null 2>&1 || { sag "efibootmgr nicht vorhanden - uebersprungen."; exit 0; }
+
+# Unsere eigene EFI-Partition (ESP) finden
+ESP=$(findmnt -no SOURCE /boot/efi 2>/dev/null)
+if [ -z "$ESP" ]; then
+    # Rueckfalle: im chroot des Installers kann findmnt leer ausgehen, obwohl die ESP
+    # gemountet ist. Dann ueber die fstab des Zielsystems suchen.
+    sag "findmnt fand /boot/efi nicht - versuche fstab..."
+    FS=$(awk '$2=="/boot/efi" && $1 !~ /^#/ {print $1; exit}' /etc/fstab 2>/dev/null)
+    case "$FS" in
+        UUID=*)     ESP=$(blkid -U "${FS#UUID=}" 2>/dev/null) ;;
+        PARTUUID=*) ESP=$(blkid -t "PARTUUID=${FS#PARTUUID=}" -o device 2>/dev/null | head -1) ;;
+        /dev/*)     ESP="$FS" ;;
+    esac
+    [ -n "$ESP" ] && sag "ueber fstab gefunden: $ESP"
+fi
+[ -n "$ESP" ] || { sag "keine EFI-Partition unter /boot/efi - uebersprungen."; exit 0; }
+
+PARTUUID=$(blkid -o value -s PARTUUID "$ESP" 2>/dev/null)
+[ -n "$PARTUUID" ] || { sag "PARTUUID von $ESP nicht lesbar - uebersprungen."; exit 0; }
+
+# Welcher Boot-Eintrag zeigt auf GENAU DIESE Partition?
+# efibootmgr -v zeigt z.B.:
+#   Boot000E* ubuntu HD(1,GPT,50a8a3a7-8153-4627-a1ce-54fdf6163543,0x1000,0x100000)/File(\EFI\UBUNTU\SHIMX64.EFI)
+NUM=$(efibootmgr -v 2>/dev/null | grep -iF "$PARTUUID" | grep -oiE '^Boot[0-9A-Fa-f]{4}' | head -1 | cut -c5-8)
+[ -n "$NUM" ] || { sag "kein eigener Boot-Eintrag fuer $ESP gefunden - uebersprungen."; exit 0; }
+
+ALT=$(efibootmgr 2>/dev/null | sed -n 's/^BootOrder: //p' | head -1)
+[ -n "$ALT" ] || { sag "BootOrder nicht lesbar - uebersprungen."; exit 0; }
+
+# Steht unser Eintrag schon vorn? Dann nichts anfassen — und den Dienst abschalten:
+# Ziel erreicht, er muss nie wieder laufen.
+case "$ALT" in
+  "$NUM"|"$NUM",*) sag "eigener Eintrag $NUM steht bereits an erster Stelle - nichts zu tun."
+                   fertig; exit 0 ;;
+esac
+
+# Eigenen Eintrag aus der Liste nehmen, vorn wieder anhaengen (Rest in alter Reihenfolge)
+REST=$(printf '%s' "$ALT" | tr ',' '\n' | grep -vixF "$NUM" | paste -sd, -)
+NEU="$NUM${REST:+,$REST}"
+
+sag "BootOrder: $ALT  ->  $NEU  (eigene ESP: $ESP)"
+if efibootmgr -o "$NEU" >/dev/null 2>&1; then
+    KONTROLLE=$(efibootmgr 2>/dev/null | sed -n 's/^BootOrder: //p' | head -1)
+    if [ "$KONTROLLE" = "$NEU" ]; then
+        sag "OK - eigener Eintrag steht jetzt an erster Stelle."
+        fertig                 # Ziel erreicht -> Dienst abschalten
+    else
+        sag "WARNUNG - Firmware meldet: $KONTROLLE (nicht wie gesetzt). Nichts weiter unternommen."
+        # KEIN fertig: beim naechsten Start nochmal versuchen (evtl. hat etwas zurueckgesetzt).
+    fi
+else
+    sag "efibootmgr -o fehlgeschlagen - Reihenfolge unveraendert."
+    # KEIN fertig: beim naechsten Start nochmal versuchen.
+fi
+exit 0

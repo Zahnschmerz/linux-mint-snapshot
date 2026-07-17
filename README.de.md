@@ -1,8 +1,8 @@
 # 📸 Rikus Mintshot
 
 **Ein bootfähiger Klon deines laufenden Linux-Mint-Systems — mit einem Klick.**
-Ähnlich dem, was „MX Snapshot" auf MX Linux macht — nur für Linux Mint, das kein
-eingebautes Gegenstück dafür hat.
+Verwandelt dein laufendes System in eine startfähige Live-ISO — etwas, wofür
+Linux Mint kein eingebautes Werkzeug mitbringt.
 
 Herausgeber: Gilbert Rikus · Kostenlos und quelloffen (GPL-3.0) · Keine Werbung, keine Konten.
 

@@ -1,0 +1,67 @@
+#!/bin/bash
+# Rikus Mintshot — Dualboot-Menue + fester Mint-Start.
+# ZWEI Dinge, damit ein Klon neben Windows richtig startet:
+#
+# 1) os-prober an: Bei modernem Mint/Ubuntu ist er standardmaessig AUS
+#    (GRUB_DISABLE_OS_PROBER=true, oder Zeile fehlt) -> update-grub findet ein daneben
+#    installiertes Windows NICHT. Wir schalten ihn ein, damit das folgende Calamares-
+#    grubcfg-Modul (update-grub) ein "Mint + Windows"-Menue erzeugt.
+#
+# 2) IMMER Mint zuerst: Mint/Ubuntu liefert `GRUB_DEFAULT=saved` + `GRUB_SAVEDEFAULT=true`
+#    -> GRUB startet automatisch das ZULETZT gewaehlte System. Waehlt der Nutzer einmal
+#    Windows (oder Windows lief zuletzt), bootet der Klon ab dann IMMER Windows -- und das
+#    Menue ist per `GRUB_TIMEOUT_STYLE=hidden` unsichtbar. Der Klon erbt das von der Quelle,
+#    also "landet er in Windows". Fix: fester Default 0 (= Mint, immer erster Eintrag), die
+#    letzte Wahl NICHT merken, Menue sichtbar mit Wartezeit (Windows bleibt waehlbar).
+#
+# 3) Start-Reihenfolge-Dienst EINSCHALTEN (siehe ganz unten) — nur HIER, weil dieses
+#    Skript ausschliesslich im frisch installierten Klon laeuft, nie auf der Quelle.
+#
+# Laeuft bei der Installation im Zielsystem (Calamares-shellprocess, vor grubcfg).
+set -e
+G=/etc/default/grub
+[ -f "$G" ] || exit 0
+
+# Eine GRUB-Einstellung setzen: vorhandene (evtl. auskommentierte) Zeile ersetzen,
+# sonst anhaengen. Bei grub-mkconfig gewinnt die letzte Definition.
+setze() {
+  if grep -qE "^[[:space:]]*#?[[:space:]]*$1=" "$G"; then
+    sed -i -E "s|^[[:space:]]*#?[[:space:]]*$1=.*|$1=$2|" "$G"
+  else
+    printf '\n%s=%s\n' "$1" "$2" >> "$G"
+  fi
+}
+
+# 1) Windows/andere Systeme ins Menue holen
+setze GRUB_DISABLE_OS_PROBER false
+
+# 2) Immer Mint zuerst + sichtbares Menue (statt "zuletzt gewaehltes" + versteckt)
+setze GRUB_DEFAULT 0
+setze GRUB_SAVEDEFAULT false
+setze GRUB_TIMEOUT_STYLE menu
+setze GRUB_TIMEOUT 10
+
+echo "dualboot: os-prober an + Mint als fester Standard (GRUB_DEFAULT=0, Menue sichtbar)"
+
+# 3) Den Start-Reihenfolge-Dienst fuer den ERSTEN Start des Klons scharfschalten.
+#
+# WARUM erst hier und nicht in der Ersteinrichtung (17.07.2026 gefunden):
+# Die Ersteinrichtung laeuft auf der QUELLE. Waere der Dienst dort eingeschaltet, wuerde
+# er beim naechsten Start der Quelle deren Boot-Reihenfolge umstellen — bei Gilbert haette
+# er MX von Platz 1 verdraengt. Die Quelle hat ihre Reihenfolge aber schon so, wie ihr
+# Besitzer sie will. Dieses Skript hier laeuft NUR im frisch installierten Klon (Calamares
+# ruft es im Zielsystem auf) — genau dort, wo der Dienst hingehoert.
+#
+# WARUM der Dienst ueberhaupt: Der eigene Firmware-Eintrag entsteht erst BEIM ERSTEN START,
+# nicht waehrend der Installation (per Protokoll bewiesen). Waehrend der Installation gibt
+# es nichts nach vorn zu setzen.
+if [ -e /etc/systemd/system/rikus-mintshot-bootorder.service ]; then
+    if systemctl enable rikus-mintshot-bootorder.service >/dev/null 2>&1; then
+        echo "dualboot: Start-Reihenfolge-Dienst fuer den ersten Start scharfgeschaltet"
+    else
+        echo "dualboot: Start-Reihenfolge-Dienst liess sich nicht einschalten (unschaedlich)"
+    fi
+else
+    echo "dualboot: Start-Reihenfolge-Dienst nicht vorhanden - uebersprungen"
+fi
+exit 0

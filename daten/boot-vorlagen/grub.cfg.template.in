@@ -15,46 +15,61 @@ set menu_color_normal=white/black
 set menu_color_highlight=dark-gray/white
 set timeout=15
 
+# WICHTIG 1: Eintragstexte bleiben REINES ASCII/ENGLISCH. GRUB kann Umlaute, Emoji (Stern)
+# und Gedankenstriche mit der Standard-Schrift NICHT sauber darstellen -> der Nutzer sieht
+# kaputte Zeichen. Deutsche Texte gehoeren in die App, NICHT ins Boot-Menue.
+# (Gilbert 17.07.2026: "beim ersten grubmenu benutze bitte unbedingt nur englische woerter".)
+#
+# WICHTIG 2: Der EMPFOHLENE Persistenz-Eintrag ist "persistence-read-only" (Aenderungen im RAM,
+# einmal beim Herunterfahren auf den Stick). Genau so macht es MX/antiX ("dynamic root
+# persistence"): das System bleibt auf dem Medium, nur die Aenderungen sind im RAM.
+# Der DIREKT-auf-den-Stick-Modus (nur "persistence") schreibt jede Aenderung sofort -> auf
+# normalen USB-Sticks so langsam, dass systemd-Dienste in ihr 90-s-Limit laufen (bewiesen an
+# Gilberts asus-Test 17.07.: dbus timeout -> 14 Folgefehler, 4 Min Boot). Deshalb steht er
+# NUR noch unter "Advanced" fuer Leute mit schneller USB-SSD.
 
-menuentry "${DISTRO} (Standard)" {
+menuentry "${DISTRO} (default)" {
     set gfxpayload=keep
     linux   /live/vmlinuz boot=live ${ifnames_opt} ${netconfig_opt} username={LIVEUSER} locales={LOCALE} keyboard-layouts={KEYBOARD} timezone={TIMEZONE}
     initrd  /live/initrd.img
 }
 
-menuentry "${DISTRO} - English (US)" {
-    set gfxpayload=keep
-    linux   /live/vmlinuz boot=live ${ifnames_opt} ${netconfig_opt} username={LIVEUSER} locales=en_US.UTF-8 keyboard-layouts=us
-    initrd  /live/initrd.img
-}
-
-menuentry "${DISTRO} ⭐ mit Persistenz — deine Änderungen bleiben / keep changes" {
-    set gfxpayload=keep
-    linux   /live/vmlinuz boot=live persistence persistence-encryption=none ${ifnames_opt} ${netconfig_opt} username={LIVEUSER} locales={LOCALE} keyboard-layouts={KEYBOARD} timezone={TIMEZONE}
-    initrd  /live/initrd.img
-}
-
-menuentry "${DISTRO} mit Persistenz, Stick-schonend — speichert beim Ausschalten / saves on shutdown" {
+menuentry "${DISTRO} - with persistence, keep changes (RECOMMENDED - shut down properly!)" {
     set gfxpayload=keep
     linux   /live/vmlinuz boot=live persistence persistence-encryption=none persistence-read-only ${ifnames_opt} ${netconfig_opt} username={LIVEUSER} locales={LOCALE} keyboard-layouts={KEYBOARD} timezone={TIMEZONE}
     initrd  /live/initrd.img
 }
 
-submenu 'Erweiterte Optionen ...' {
+# Bequem ins BIOS/UEFI-Setup - ohne die (herstellerabhaengige) Boot-Taste zu suchen.
+# Nur auf EFI-Geraeten, die den Sprung koennen. Genau der Weg, um bei Dualboot mit mehreren
+# Platten die Start-Platte umzustellen (das kann Software nicht erzwingen, siehe App-Doku).
+if [ "${grub_platform}" = "efi" ]; then
+menuentry "Reboot into Firmware Setup (BIOS/UEFI)" {
+    fwsetup
+}
+fi
 
-    menuentry "${DISTRO} (ganz in den RAM laden — NUR wenn dein System kleiner als dein RAM ist!)" {
+submenu 'Advanced options ...' {
+
+    menuentry "${DISTRO} - persistence written directly to stick (SLOW - only for fast USB-SSD)" {
+	set gfxpayload=keep
+	linux   /live/vmlinuz boot=live persistence persistence-encryption=none ${ifnames_opt} ${netconfig_opt} username={LIVEUSER} locales={LOCALE} keyboard-layouts={KEYBOARD} timezone={TIMEZONE}
+	initrd  /live/initrd.img
+    }
+
+    menuentry "${DISTRO} - load all to RAM (only if system is smaller than your RAM!)" {
 	set gfxpayload=keep
 	linux   /live/vmlinuz boot=live toram ${ifnames_opt} ${netconfig_opt} username={LIVEUSER} locales={LOCALE} keyboard-layouts={KEYBOARD} timezone={TIMEZONE}
 	initrd  /live/initrd.img
     }
 
-    menuentry "${DISTRO} (failsafe/Notmodus)" {
+    menuentry "${DISTRO} - failsafe" {
 	set gfxpayload=keep
 	linux   /live/vmlinuz boot=live nocomponents=xinit noapm noapic nolapic nodma nosmp forcepae nomodeset vga=normal ${ifnames_opt} ${netconfig_opt} username={LIVEUSER}
 	initrd  /live/initrd.img
     }
 
-    menuentry "Speichertest (Memory test)" {
+    menuentry "Memory test" {
 	kernel   /live/memtest
     }
 

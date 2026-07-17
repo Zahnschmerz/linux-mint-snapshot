@@ -1,0 +1,30 @@
+[Unit]
+# Setzt beim ERSTEN Start des installierten Systems den eigenen Firmware-Eintrag
+# nach vorn — damit der Rechner bei Dualboot nicht weiter Windows startet.
+#
+# WARUM erst hier und nicht schon beim Installieren (17.07.2026 bewiesen):
+# Der Firmware-Eintrag ("Boot0001* ubuntu") entsteht ERST BEIM ERSTEN START, nicht
+# waehrend der Installation. Das Protokoll des Installer-Laufs sagte woertlich:
+#     "kein eigener Boot-Eintrag fuer /dev/nvme1n1p1 gefunden - uebersprungen."
+# Sekunden spaeter, im laufenden System, war er da — mit exakt der gesuchten Kennung.
+# Man kann nichts nach vorn setzen, was es noch nicht gibt. Deshalb: hier.
+Description=Rikus Mintshot — eigenen Start-Eintrag in der Firmware nach vorn setzen
+Documentation=https://snapshot.rikus.info
+
+# Nur auf EFI-Rechnern sinnvoll (BIOS/Legacy kennt keine BootOrder).
+ConditionPathExists=/sys/firmware/efi
+
+# Die EFI-Partition muss eingehaengt sein — sonst findet das Skript seine Kennung nicht.
+RequiresMountsFor=/boot/efi
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/rikus-mintshot-bootorder
+RemainAfterExit=no
+# Das Skript schaltet sich nach Erfolg selbst ab (systemctl disable) und faengt
+# jeden Fehlerfall sauber ab (exit 0). Ein Scheitern darf den Start NIE stoeren:
+SuccessExitStatus=0 1
+
+[Install]
+WantedBy=multi-user.target

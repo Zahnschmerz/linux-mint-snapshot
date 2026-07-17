@@ -4,7 +4,7 @@
 # Rikus Mintshot (v5.0) — 1:1 clone of the running system as a bootable live ISO.
 # Published by / Herausgeber: Gilbert Rikus — License: GPL-3.0-or-later
 #
-# v5 = the "clone model" (Gilbert's product decision, 2026-07-07, MX-Snapshot-like):
+# v5 = the "clone model" (Gilbert's product decision, 2026-07-07):
 #   * The snapshot is a 1:1 CLONE: account, settings and saved logins ALWAYS included.
 #     Big folders (Documents, Pictures, VMs ...) can be left out via checkboxes.
 #   * The live stick boots STRAIGHT into the owner's own session (real user, autologin),
@@ -12,7 +12,7 @@
 #   * The installer (Calamares) does a 1:1 clone install: no user-creation page,
 #     no locale/keyboard pages — it only prepares the target disk and the bootloader.
 #   * The app itself lives in /opt/rikus-mintshot (installed by the assistant),
-#     so it is part of every clone — like mx-snapshot on MX Linux.
+#     so it is part of every clone.
 #   * Everything else proven in v4 stays: language table DE/EN, dynamic distro/user
 #     values, sudo -n/pkexec, first-start assistant, crash-safe build engine.
 #   * Self test: MINT_SNAP_TEST=1 ./rikus-mintshot.py --selbsttest
@@ -33,7 +33,7 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, GLib, Pango, GdkPixbuf
 
-VERSION = "6.0"
+VERSION = "6.7"
 APP_ORDNER = os.path.dirname(os.path.abspath(__file__))
 SYSTEM_ORDNER = '/opt/rikus-mintshot'
 DATEN = os.path.join(APP_ORDNER, 'daten')
@@ -410,7 +410,12 @@ BAU_PAKETE = ('calamares live-boot live-config-systemd live-boot-initramfs-tools
               'xorriso isolinux syslinux-common squashfs-tools grub-efi-amd64-bin '
               'grub-pc-bin dosfstools rsync '
               # Secure Boot: fertig signierte Bausteine (Microsoft/Canonical) + mtools fuers EFI-Image
-              'shim-signed grub-efi-amd64-signed mtools')
+              'shim-signed grub-efi-amd64-signed mtools '
+              # Start-Reihenfolge (Dualboot): efibootmgr setzt nach der Installation den eigenen
+              # Firmware-Eintrag nach vorn, sonst startet der Rechner weiter Windows. Es MUSS im
+              # Klon liegen (dort laeuft rikus-mintshot-bootorder). Auf den meisten Mint-Systemen
+              # ist es zufaellig schon da -> auf dem eigenen PC faellt ein Fehlen NIE auf.
+              'efibootmgr')
 
 # ---- Secure-Boot-Bausteine (fertig signiert von Microsoft/Canonical) ----
 # Microsoft-signierter shim (Erststarter), Canonical-signierter GRUB, MokManager.
@@ -469,6 +474,21 @@ def fehlende_teile():
     if not os.path.exists('/usr/local/sbin/rikus-mintshot-home-fix'):
         fehlt.append('Home-Reparatur-Skript (Klon ohne Home)' if SPRACHE == 'de'
                      else 'home-repair script (clone without home)')
+    if not os.path.exists('/usr/local/sbin/rikus-mintshot-netzfix'):
+        fehlt.append('Netz-Portabilitaet (WLAN auf fremder Hardware)' if SPRACHE == 'de'
+                     else 'network portability (WiFi on foreign hardware)')
+    if not os.path.exists('/etc/systemd/system/rikus-mintshot-netzfix.service'):
+        fehlt.append('Netz-Autostart (WLAN schon beim Live-Boot vom Stick)' if SPRACHE == 'de'
+                     else 'network auto-start (WiFi already on live boot)')
+    if not os.path.exists('/usr/local/sbin/rikus-mintshot-dualboot'):
+        fehlt.append('Dualboot-Menue (Windows neben Mint)' if SPRACHE == 'de'
+                     else 'dual-boot menu (Windows alongside Mint)')
+    if not os.path.exists('/usr/local/sbin/rikus-mintshot-bootorder'):
+        fehlt.append('Start-Reihenfolge (Mint zuerst statt Windows)' if SPRACHE == 'de'
+                     else 'boot order (Mint first instead of Windows)')
+    if not os.path.exists('/etc/systemd/system/rikus-mintshot-bootorder.service'):
+        fehlt.append('Start-Reihenfolge-Dienst (greift beim ersten Start des Klons)' if SPRACHE == 'de'
+                     else 'boot-order service (runs on the clone\'s first start)')
     if not os.path.exists('/usr/local/sbin/rikus-mintshot-persist-save'):
         fehlt.append('Persistenz-Speicherdienst (RAM-Modus)' if SPRACHE == 'de'
                      else 'persistence save service (RAM mode)')
@@ -520,6 +540,34 @@ install -m 0755 "{DATEN}/live-hooks/2000-installer-desktop-icon" /usr/lib/live/c
 # weil Calamares $-Variablen im Befehl selbst als eigene Template-Variablen missversteht).
 mkdir -p /usr/local/sbin
 install -m 0755 "{DATEN}/scripts/rikus-mintshot-home-fix" /usr/local/sbin/
+# Netz-Portabilitaet: loest WLAN/LAN im Klon von der Interface-Bindung (netplan "match:"),
+# sonst gilt die Verbindung nur fuer die Karte der Quelle -> auf fremder Hardware ist das
+# gespeicherte WLAN-Passwort "vergessen". Calamares ruft das Skript im Zielsystem auf.
+install -m 0755 "{DATEN}/scripts/rikus-mintshot-netzfix" /usr/local/sbin/
+# ...und als Auto-Start-Dienst: so greift die Portabilitaet schon beim LIVE-Boot vom Stick
+# (nicht erst nach einer Installation) -> das gespeicherte WLAN verbindet auf fremder
+# Hardware von selbst, ohne dass der Nutzer etwas tun muss.
+install -m 0644 "{DATEN}/scripts/rikus-mintshot-netzfix.service" /etc/systemd/system/
+systemctl enable rikus-mintshot-netzfix.service >/dev/null 2>&1 || true
+# Dualboot: os-prober einschalten, damit ein daneben installiertes Windows automatisch
+# ins GRUB-Menue kommt (bei modernem Mint ist os-prober standardmaessig aus).
+install -m 0755 "{DATEN}/scripts/rikus-mintshot-dualboot" /usr/local/sbin/
+# Start-Reihenfolge: setzt den eigenen Firmware-Eintrag nach vorn. Ohne das startet der
+# Rechner bei Dualboot mit mehreren Platten weiter Windows (dessen Eintrag steht dort meist
+# an Platz 1) — die Platten-Reihenfolge im BIOS hilft nicht, die BootOrder liegt darueber.
+# ⭐ Laeuft als EINMALIGER Dienst beim ERSTEN START des Klons, NICHT bei der Installation:
+# Der Firmware-Eintrag entsteht erst beim ersten Start (17.07.2026 per Protokoll bewiesen).
+# Der Dienst schaltet sich nach Erfolg selbst ab.
+install -m 0755 "{DATEN}/scripts/rikus-mintshot-bootorder" /usr/local/sbin/
+install -m 0644 "{DATEN}/scripts/rikus-mintshot-bootorder.service" /etc/systemd/system/
+# 🛑 HIER BEWUSST KEIN "systemctl enable"! Der Dienst wuerde sonst auf DIESEM Rechner
+# (der Klon-QUELLE) beim naechsten Start die Boot-Reihenfolge umstellen und koennte ein
+# daneben installiertes zweites System von Platz 1 verdraengen (17.07.2026 im Trockenlauf
+# gefunden, bevor es passieren konnte). Die Quelle hat ihre Reihenfolge schon so, wie ihr
+# Besitzer sie will.
+# Eingeschaltet wird der Dienst NUR im frisch installierten Klon — durch
+# rikus-mintshot-dualboot, das Calamares im Zielsystem aufruft.
+systemctl disable rikus-mintshot-bootorder.service >/dev/null 2>&1 || true
 mkdir -p /etc/skel/Desktop
 install -m 0755 "{DATEN}/desktop/system-installieren.desktop" /etc/skel/Desktop/
 
@@ -680,8 +728,8 @@ def system_ballast_ausschluesse():
     wie sie heissen. Ohne das laeuft die Platte beim Bau voll und die ISO wird unbrauchbar:
       * Aktive Swap-Dateien (aus /proc/swaps) — der Name variiert (swapfile, swap-file, ...),
         eine feste Liste verfehlt ihn leicht. Swap gehoert nie in einen Klon.
-      * Ein zweites Betriebssystem als 'Frugal'-Installation im Wurzelverzeichnis (antiX/MX:
-        ein Ordner mit einer 'linuxfs'-Datei). Dessen rootfs/homefs sind SPARSE-Dateien:
+      * Ein zweites Betriebssystem als 'Frugal'-Installation im Wurzelverzeichnis
+        (ein Ordner mit einer 'linuxfs'-Datei). Dessen rootfs/homefs sind SPARSE-Dateien:
         `du` zeigt wenige GB, beim Kopieren blaehen sie aber auf ihre volle Groesse auf
         (z. B. 6,5 GB -> 113 GB). Eine zweite OS gehoert ohnehin nicht in den Klon.
     Gibt absolute Pfade zurueck."""
@@ -771,6 +819,13 @@ def konfig_anlegen(weglassen=None, modus='voll', iso_ordner=None, work_ordner=No
         'kernel_image': f'"{KONFIG_ORDNER}/vmlinuz"',
         'initrd_image': f'"{KONFIG_ORDNER}/initrd.img"',
         'make_sha256sum': '"yes"',
+        # Datei-Capabilities (z.B. ping's cap_net_raw=ep) + ACLs beim Kopieren MITNEHMEN.
+        # refractasnapshot kopiert mit `rsync -av`, und -a enthaelt KEINE xattrs -> ohne dies
+        # verliert JEDER Klon die capabilities: ping laeuft dann nur noch mit sudo, andere
+        # setcap-Programme brechen. --xattrs traegt security.capability mit; mksquashfs bewahrt
+        # xattrs standardmaessig weiter. (rsync_option3 wird in refractasnapshot an den System-
+        # rsync angehaengt: `rsync -av / myfs/ ... ${rsync_option3}`.)
+        'rsync_option3': '"--xattrs --acls"',
         # Kritische Schluessel ERZWINGEN -> keine Extra-Prompts (Pipe-Input begrenzt) + keine Haenger,
         # egal was in einer vorhandenen /etc/refractasnapshot.conf steht:
         'limit_cpu': '"no"',
@@ -855,7 +910,7 @@ def boot_vorlagen_fuellen():
 class SnapshotApp(Gtk.Window):
 
     def __init__(self, selbsttest=False):
-        super().__init__(title="Rikus Mintshot")
+        super().__init__(title=f"Rikus Mintshot {VERSION}")
         self.set_default_size(760, 700)
         self.set_border_width(14)
         self.icon_pfad = os.path.join(DATEN, 'icon.png')
@@ -965,7 +1020,7 @@ class SnapshotApp(Gtk.Window):
         except (OSError, ValueError):
             pass
         box_fort.pack_start(self.gitter, False, False, 0)
-        # Knopf: beliebigen weiteren Ordner weglassen (wie MX Snapshot)
+        # Knopf: beliebigen weiteren Ordner weglassen
         knopf_ordner = Gtk.Button(label=T['zusatz_knopf'])
         knopf_ordner.set_halign(Gtk.Align.START)
         knopf_ordner.connect('clicked', self.ordner_waehlen)
@@ -1389,6 +1444,13 @@ class SnapshotApp(Gtk.Window):
             innen = (
                 f'cp "{grub_v}" /usr/lib/refractasnapshot/grub.cfg.template && '
                 f'cp "{live_v}" /usr/lib/refractasnapshot/iso/isolinux/live.cfg && '
+                # Die Start-Datei (initrd) MUSS den Live-Start (live-boot) enthalten, sonst
+                # "Kernel Panic" beim Booten vom Stick. live-boot liefert die Bausteine, aber
+                # die initrd wird nach dessen Installation nicht automatisch neu gebaut, und
+                # refractasnapshot baut sie ebenfalls NICHT neu -> auf frisch eingerichteten
+                # Rechnern fehlt der Live-Start. Absichern: fehlt er, initrd einmal neu bauen.
+                f'{{ lsinitramfs /boot/initrd.img-{kern} 2>/dev/null | grep -q scripts/live '
+                f'|| update-initramfs -u -k {kern} ; }} && '
                 f'printf "1\\n{DISTRO}\\n" | refractasnapshot -c "{conf}"')
             if secure_boot_moeglich():
                 # Nachbau in eine Datei schreiben (haelt Anfuehrungszeichen aus dem Aufruf raus)
@@ -1642,6 +1704,17 @@ done'''], timeout=25, check=False)
             modell = sticks[0][3].strip() if len(sticks[0]) > 3 else ''
             geraet = f"/dev/{name}" + (f" ({modell})" if modell else "")
             geraet_pfad = f"/dev/{name}"
+            if not os.path.exists(iso):
+                de = SPRACHE == 'de'
+                self.melde(Gtk.MessageType.ERROR, T['pruef_fehler'],
+                           (f"Die gewählte ISO-Datei ist nicht mehr da:\n{iso}\n\n"
+                            "Wurde sie gelöscht, verschoben oder auf einen anderen Datenträger\n"
+                            "gelegt? Bitte baue den Schnappschuss neu oder wähle in der Liste\n"
+                            "eine ISO, die noch vorhanden ist.") if de else
+                           (f"The selected ISO file is gone:\n{iso}\n\n"
+                            "Was it deleted or moved to another drive? Please rebuild the\n"
+                            "snapshot, or pick an ISO from the list that still exists."))
+                return
             groesse = os.path.getsize(iso)
 
             soll, werkzeug = None, 'sha256sum'
@@ -1765,17 +1838,23 @@ done'''], timeout=25, check=False)
                 self.melde(Gtk.MessageType.INFO,
                            'Persistenz ist eingerichtet' if de else 'Persistence is set up',
                            ((r.stdout.strip() or 'Fertig.') +
-                            "\n\nBeim Starten vom Stick im Boot-Menü wählen:\n\n"
-                            "⭐ »mit Persistenz« — deine Änderungen bleiben.\n\n"
-                            "»mit Persistenz, Stick-schonend« — arbeitet im Arbeitsspeicher\n"
-                            "und speichert erst beim Ausschalten. Schont den Stick, aber:\n"
-                            "NICHT hart ausschalten, sonst ist die Sitzung weg.") if de else
+                            "\n\nBeim Starten vom Stick im Boot-Menü diesen Eintrag wählen\n"
+                            "(das Boot-Menü ist immer englisch — es kann keine Umlaute):\n\n"
+                            "»with persistence, keep changes (RECOMMENDED)«\n\n"
+                            "Dein Klon merkt sich dann alles. Er arbeitet im Arbeitsspeicher\n"
+                            "und speichert einmal beim Herunterfahren — ein bewährter Weg:\n"
+                            "flott im Betrieb und schonend für den Stick.\n"
+                            "Tipp: ein schneller USB-3-Stick speichert in Sekunden statt Minuten.\n\n"
+                            "⚠️ WICHTIG: Immer ordentlich herunterfahren (Menü → Ausschalten)!\n"
+                            "Bei hartem Ausschalten ist die Sitzung verloren.") if de else
                            ((r.stdout.strip() or 'Done.') +
-                            "\n\nWhen booting the stick, pick from the boot menu:\n\n"
-                            "⭐ »with persistence« — your changes stay.\n\n"
-                            "»with persistence, gentle on the stick« — works in RAM and only\n"
-                            "saves on shutdown. Easier on the stick, but: do NOT power off\n"
-                            "abruptly, or the session is lost."))
+                            "\n\nWhen booting the stick, pick this entry from the boot menu:\n\n"
+                            "»with persistence, keep changes (RECOMMENDED)«\n\n"
+                            "Your clone then remembers everything. It works in RAM and saves\n"
+                            "once on shutdown — a proven approach: fast in use and gentle on\n"
+                            "the stick. Tip: a fast USB-3 stick saves in seconds, not minutes.\n\n"
+                            "⚠️ IMPORTANT: always shut down properly (menu → Shut down)!\n"
+                            "Pulling the plug loses the session."))
             else:
                 self.melde(Gtk.MessageType.ERROR, 'Fehler' if de else 'Error',
                            (r.stdout + '\n' + r.stderr).strip() or ('Fehlgeschlagen' if de else 'Failed'))

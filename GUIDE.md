@@ -4,7 +4,7 @@
 *(Version and license text are always available in the app under „ℹ️ About".)*
 
 This program creates a **bootable copy of your running Linux Mint system**
-with one click — much like "MX Snapshot" does on MX Linux. Write the ISO to a
+with one click — something Linux Mint has no built-in tool for. Write the ISO to a
 USB stick, boot any PC from it, and **install** your system permanently with a
 double click.
 
@@ -47,7 +47,7 @@ present. If something is missing, the button **"🔧 Set up now"** appears:
   administrative rights).
 - Setup takes a few minutes and ends with **"✅ Setup complete"** — done, this
   happens only once. This also installs the app into the system itself, so it is
-  included in every snapshot (like mx-snapshot on MX Linux).
+  included in every snapshot.
 
 ---
 
@@ -114,7 +114,11 @@ folder you like.
 2. Right after power-on, open the **boot menu** — usually **F12**
    (on some machines **F2**, **F8**, **F10** or **Esc**).
 3. Choose the **USB stick** from the list.
-4. Pick the **first entry** of the start menu (shown in your own language).
+4. Pick the **first entry** ("Linux Mint (Standard)"). The menu deliberately has
+   only **two start entries** — **Standard** and **with persistence** (section 7) —
+   plus an entry **"Reboot into Firmware Setup (BIOS/UEFI)"** that takes you
+   conveniently into the BIOS (handy for dual-boot, see section 8).
+   *(The boot menu is always English — it cannot display accented characters.)*
 5. After 1–2 minutes the desktop appears. If you took **your settings** along,
    the live system boots straight into **your own user account** — with your
    icons and apps, exactly as you know it. Nothing on your real computer
@@ -125,9 +129,52 @@ folder you like.
 > Microsoft- and Canonical-signed boot chain that modern PCs (including
 > those with Windows alongside) accept. It works with Secure Boot on or off.
 
+> 💡 **Started on a different PC than the source machine?** Your clone brings the
+> drivers of your own PC with it. On **foreign hardware**, **graphics or Wi-Fi**
+> may only work smoothly after installing the matching driver. The saved **Wi-Fi
+> password** is carried over — even if the network card in the other PC is named
+> differently.
+
 ---
 
-## 7. Install the system permanently
+## 7. Keep changes on the stick (persistence)
+
+Normally a live stick forgets **everything** on shutdown — at the next start it's
+fresh again. With **persistence**, the stick **keeps** your changes (new files,
+programs, Wi-Fi, settings) — **without a permanent installation**.
+
+**How to set it up:**
+
+1. Write the ISO to the stick as usual (step 4) and verify it (step 5).
+2. In the program, click **"💾 Set up persistence"** and pick the stick. A
+   "persistence box" is created in the **free space behind** the ISO; the ISO
+   itself stays untouched. (You can choose whether **everything** or only your
+   **personal folder** is remembered.)
+
+**When you boot from the stick**, pick this entry from the boot menu:
+
+> **»with persistence, keep changes (RECOMMENDED)«**
+
+Your clone then works in **RAM** and writes everything to the stick **once on
+shutdown** — a proven approach: fast in use and gentle on the stick.
+
+> 💡 **Use a fast USB-3 stick!** How long saving on shutdown takes **depends
+> entirely on the stick**. A slow (often older, USB-2) stick may need **1–2
+> minutes**; a fast **USB-3 stick or a USB-SSD** does it in **seconds**. For
+> persistence, a good stick really pays off.
+
+> ⚠️ **Always shut down properly** (menu → Shut down). If you just pull the plug or
+> hold the power button, the **whole session is lost** — because it is saved only
+> on a proper shutdown.
+
+> 💡 **For advanced users only:** Under **"Advanced options"** you'll also find
+> »persistence written directly to stick«. It writes every change immediately —
+> but on ordinary USB sticks that is **very slow**: booting can take minutes and
+> system services may fail. Only sensible with a fast **USB-SSD**.
+
+---
+
+## 8. Install the system permanently
 
 The live desktop shows the icon **"Install System"**:
 
@@ -147,6 +194,15 @@ The live desktop shows the icon **"Install System"**:
    account is created (the installer icon and live-session leftovers are
    removed automatically).
 
+> 🪟 **Windows alongside (dual-boot with two drives)?** The computer may start
+> **Windows first** after installation. This is **normal** and comes from the
+> machine's firmware (it prefers the Windows drive) — not from Linux Mint.
+> **One-time fix:** enter the **BIOS/UEFI** at power-on and move the **Linux
+> drive** to the top. The easiest way is the menu entry **"Reboot into Firmware
+> Setup (BIOS/UEFI)"** in the stick's start menu — no need to hunt for the
+> (vendor-specific) BIOS key. After that Linux Mint starts on its own, and Windows
+> stays selectable in the boot menu.
+
 > ⚠️ **Space on the target disk:** the disk you install onto must be **at least
 > as large as your snapshot when unpacked** — with "System + Home" that can be
 > considerably more than the ISO file suggests. If the disk is too small, the
@@ -154,7 +210,7 @@ The live desktop shows the icon **"Install System"**:
 
 ---
 
-## 8. FAQ
+## 9. FAQ
 
 **Which option should I pick?**  When in doubt, the middle one:
 **"System + my settings"**. It's preselected, stays lean and is still ready to

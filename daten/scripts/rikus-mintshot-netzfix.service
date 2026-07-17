@@ -1,0 +1,18 @@
+[Unit]
+Description=Rikus Mintshot — WLAN/LAN-Portabilitaet fuer den Klon (fremde Hardware)
+Documentation=https://github.com/Zahnschmerz/rikus-mintshot
+# Nach NetworkManager: der Dienst stellt die Interface-Bindung (netplan "match: name")
+# von der festen Karte der Quelle auf den Platzhalter "wl*"/"e*" um und wendet sie an,
+# falls noetig. So verbindet das gespeicherte WLAN auch beim LIVE-Boot auf fremder
+# Hardware - nicht erst nach einer Installation. Auf schon umgestellten Systemen tut
+# der Dienst nichts (kein unnoetiger Netz-Neustart bei jedem Boot).
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/rikus-mintshot-netzfix --apply
+
+[Install]
+WantedBy=multi-user.target

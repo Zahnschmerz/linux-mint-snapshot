@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+# Rikus Mintshot — Netzwerk-Portabilitaet fuer den Klon.
+# Ubuntu/Mint bindet WLAN-/LAN-Verbindungen in /etc/netplan/*.yaml fest an den
+# Interface-NAMEN der Klon-Quelle: »match: name: "<karte>"« (z.B. "wlp0s20f3").
+# Auf FREMDER Hardware heisst die Karte anders -> die Verbindung (mitsamt
+# gespeichertem WLAN-Passwort) wird ignoriert, das WLAN bleibt unverbunden.
+#
+# FIX: den festen Interface-Namen im match-Block durch einen PLATZHALTER ersetzen,
+# der auf jede Karte desselben Typs passt -- WLAN -> "wl*", Ethernet -> "e*".
+# NetworkManager (nutzt netplan als Backend) erzeugt daraus »interface-name=wl*«
+# und bindet die Verbindung an die vorhandene Karte. Passwort/SSID/Rest bleiben.
+#
+# WICHTIG: den match-Block NICHT komplett loeschen! Dann macht netplan den
+# Verbindungs-NAMEN (z.B. "NM-8fb7...") zum Interface-Namen -> existiert nicht ->
+# Verbindung tot. (Genau dieser Fehler trat in der ersten Fassung auf.)
+# Ebenso wird eine »macaddress:«-Bindung entfernt (haengt an der konkreten Karte).
+import glob, re, sys
+geaendert = 0
+for f in glob.glob('/etc/netplan/*.yaml'):
+    try:
+        lines = open(f).read().split('\n')
+    except OSError:
+        continue
+    out, in_match, mind, hit = [], False, None, False
+    for line in lines:
+        ind = len(line) - len(line.lstrip())
+        s = line.strip()
+        if s == 'match:':
+            in_match = True; mind = ind; out.append(line); continue
+        if in_match and (s == '' or ind > mind):
+            m = re.match(r'^(\s*name:\s*")([^"]*)(".*)$', line)
+            if m:
+                name = m.group(2)
+                if name.startswith('wl'):
+                    g = 'wl*'          # jedes WLAN-Interface (wlp*/wlan*/wlo*/wlx*)
+                elif name.startswith('e'):
+                    g = 'e*'           # jedes Ethernet-Interface (enp*/eth*/eno*/ens*)
+                else:
+                    g = name           # unbekannter Typ: unveraendert lassen
+                if g != name:
+                    out.append(m.group(1) + g + m.group(3)); hit = True; continue
+                out.append(line); continue
+            if re.match(r'^\s*macaddress:', line):   # MAC bindet an DIE Karte -> weg
+                hit = True; continue
+            out.append(line); continue
+        in_match = False
+        out.append(line)
+    if hit:
+        try:
+            open(f, 'w').write('\n'.join(out)); geaendert += 1
+        except OSError:
+            pass
+print(f"netzfix: {geaendert} netplan-Datei(en) auf Interface-Platzhalter (wl*/e*) umgestellt")
+
+# Mit "--apply" (so ruft der Boot-Dienst rikus-mintshot-netzfix.service auf): nur wenn
+# wirklich etwas umgestellt wurde, netplan sofort neu anwenden -> NetworkManager uebernimmt
+# die portable Bindung, das gespeicherte WLAN verbindet auf der fremden Karte. Beim LIVE-Boot
+# passiert das automatisch, nicht erst nach einer Installation. Steht schon "wl*" drin (jeder
+# weitere Boot), wird nichts angewendet -> kein unnoetiger Netz-Neustart.
+if geaendert and '--apply' in sys.argv:
+    import subprocess
+    print("netzfix: wende die Umstellung an (netplan apply) ...")
+    subprocess.run(['netplan', 'apply'], check=False)

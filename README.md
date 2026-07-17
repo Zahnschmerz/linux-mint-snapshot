@@ -1,8 +1,8 @@
 # 📸 Rikus Mintshot
 
 **A one-click, bootable clone of your running Linux Mint installation.**
-Similar to what "MX Snapshot" does on MX Linux — this brings the same idea
-to Linux Mint, which has no built-in equivalent.
+It turns your running system into a bootable live ISO — something Linux Mint
+has no built-in tool for.
 
 Published by Gilbert Rikus · Free and open source (GPL-3.0) · No ads, no accounts.
 

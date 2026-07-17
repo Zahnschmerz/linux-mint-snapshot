@@ -4,9 +4,9 @@
 *(Version und Lizenztext stehen jederzeit im Programm unter „ℹ️ Über".)*
 
 Dieses Programm erstellt mit einem Klick eine **startfähige Kopie deines
-laufenden Linux-Mint-Systems** — so ähnlich wie „MX Snapshot" auf MX Linux.
-Die ISO kannst du auf einen USB-Stick schreiben, davon jeden PC starten und
-dein System mit einem Doppelklick fest installieren.
+laufenden Linux-Mint-Systems** — etwas, wofür Linux Mint kein eigenes Werkzeug
+mitbringt. Die ISO kannst du auf einen USB-Stick schreiben, davon jeden PC starten
+und dein System mit einem Doppelklick fest installieren.
 
 **Du entscheidest dabei selbst, wie viel mitkommt** — vom nackten System bis
 zum vollständigen Klon mit all deinen Dateien. Nach der Installation
@@ -48,7 +48,7 @@ Fehlt etwas, erscheint der Knopf **„🔧 Jetzt einrichten"**:
 - Die Einrichtung dauert wenige Minuten. Danach erscheint
   **„✅ Einrichtung abgeschlossen"** — fertig, das war einmalig. Dabei wird
   das Programm auch fest ins System eingebaut, damit es in jedem Klon
-  automatisch mit dabei ist (wie mx-snapshot auf MX Linux).
+  automatisch mit dabei ist.
 
 ---
 
@@ -116,7 +116,11 @@ Mit **„➕ Weiteren Ordner weglassen …"** kommt jeder beliebige Ordner dazu.
 2. Direkt beim Einschalten das **Boot-Menü** öffnen — meistens mit **F12**
    (je nach Hersteller auch **F2**, **F8**, **F10** oder **Esc**).
 3. Den **USB-Stick** aus der Liste wählen.
-4. Im Startmenü den **ersten Eintrag** wählen (er steht in deiner Sprache).
+4. Im Startmenü den **ersten Eintrag** („Linux Mint (Standard)") wählen. Das Menü
+   hat bewusst nur **zwei Start-Einträge** — **Standard** und **mit Persistenz**
+   (Punkt 7) — plus einen Eintrag **„Reboot into Firmware Setup (BIOS/UEFI)"**, der
+   dich bequem ins BIOS bringt (praktisch bei Dualboot, siehe Punkt 8).
+   *(Das Boot-Menü ist immer englisch — es kann keine Umlaute darstellen.)*
 5. Nach etwa 1–2 Minuten erscheint der Schreibtisch. Hast du **deine
    Einstellungen** mitgenommen, startet das Live-System direkt in **deinem
    eigenen Benutzerkonto** — mit deinen Symbolen und Programmen, genau wie du
@@ -128,9 +132,58 @@ Mit **„➕ Weiteren Ordner weglassen …"** kommt jeder beliebige Ordner dazu.
 > Canonical signierte Startkette, die moderne PCs (auch mit Windows daneben)
 > akzeptieren. Er läuft mit Secure Boot an oder aus.
 
+> 💡 **Auf einem anderen Rechner als dem Quell-PC gestartet?** Dein Klon bringt die
+> Treiber deines eigenen Rechners mit. Auf **fremder Hardware** kann es sein, dass
+> **Grafik oder WLAN** erst nach dem Nachinstallieren des passenden Treibers rund
+> laufen. Das gespeicherte **WLAN-Passwort** wird dabei übernommen — auch wenn die
+> Netzwerkkarte im anderen Rechner anders heißt.
+
 ---
 
-## 7. System fest installieren
+## 7. Änderungen auf dem Stick behalten (Persistenz)
+
+Ein Live-Stick vergisst normalerweise beim Ausschalten **alles** — beim nächsten
+Start ist er wieder wie frisch. Mit **Persistenz** behält der Stick deine
+Änderungen (neue Dateien, Programme, WLAN, Einstellungen) — **ganz ohne feste
+Installation**.
+
+**So richtest du sie ein:**
+
+1. ISO ganz normal auf den Stick schreiben (Punkt 4) und kontrollieren (Punkt 5).
+2. Im Programm auf **„💾 Persistenz einrichten"** klicken und den Stick wählen.
+   Auf dem freien Platz **hinter** der ISO wird eine „Persistenz-Kiste" angelegt;
+   die ISO selbst bleibt unangetastet. (Du kannst wählen, ob **alles** oder nur
+   dein **persönlicher Ordner** gemerkt wird.)
+
+**Beim Starten vom Stick** wählst du im Boot-Menü diesen Eintrag:
+
+> **»with persistence, keep changes (RECOMMENDED)«**
+
+*(Das Boot-Menü ist immer englisch — es kann keine Umlaute darstellen.)*
+
+Dein Klon arbeitet dann im **Arbeitsspeicher** und schreibt **einmal beim
+Herunterfahren** alles auf den Stick — ein bewährter Weg: flott im Betrieb und
+schonend für den Stick.
+
+> 💡 **Nimm einen schnellen USB-3-Stick!** Wie lange das Speichern beim
+> Herunterfahren dauert, **hängt komplett vom Stick ab**. Ein langsamer (oft
+> älterer, USB-2-)Stick kann dafür **1–2 Minuten** brauchen — bei einem schnellen
+> **USB-3-Stick oder einer USB-SSD** sind es nur **Sekunden**. Für Persistenz lohnt
+> sich ein guter Stick also wirklich.
+
+> ⚠️ **Unbedingt richtig herunterfahren** (Menü → Ausschalten). Ziehst du einfach
+> den Stecker oder hältst den Ausschaltknopf gedrückt, ist die **ganze Sitzung
+> weg** — denn gespeichert wird erst beim ordentlichen Herunterfahren.
+
+> 💡 **Nur für Fortgeschrittene:** Unter **„Advanced options"** liegt zusätzlich
+> »persistence written directly to stick«. Der schreibt jede Änderung sofort mit —
+> auf normalen USB-Sticks ist das aber **sehr langsam**: Der Start kann Minuten
+> dauern, und Systemdienste können dabei scheitern. Sinnvoll nur mit einer
+> schnellen **USB-SSD**.
+
+---
+
+## 8. System fest installieren
 
 Auf dem Schreibtisch des Live-Systems liegt das Symbol **„System installieren"**:
 
@@ -149,6 +202,15 @@ Auf dem Schreibtisch des Live-Systems liegt das Symbol **„System installieren"
 7. Anmelden: mit **deinem gewohnten Konto und Passwort** — es wird KEIN
    neues Konto angelegt (Installer-Symbol und Live-Reste sind automatisch entfernt).
 
+> 🪟 **Windows daneben (Dualboot mit zwei Platten)?** Dann kann es sein, dass der
+> Rechner nach der Installation **zuerst wieder Windows** startet. Das ist **normal**
+> und liegt an der Firmware des Rechners (sie bevorzugt die Windows-Platte) — nicht
+> an Linux Mint. **So lösst du es, einmalig:** Beim Einschalten ins **BIOS/UEFI**
+> gehen und die **Linux-Platte** an die erste Stelle setzen. Am bequemsten geht das
+> über den Menüpunkt **„Reboot into Firmware Setup (BIOS/UEFI)"** im Start-Menü des
+> Sticks — dann musst du nicht die (bei jedem Hersteller andere) BIOS-Taste suchen.
+> Danach startet Linux Mint von selbst, und Windows bleibt im Startmenü wählbar.
+
 > ⚠️ **Platz auf der Zielplatte:** Die Festplatte, auf die du installierst, muss
 > **mindestens so groß sein wie dein Schnappschuss entpackt** — bei „System + Home"
 > kann das deutlich mehr sein, als die ISO-Datei vermuten lässt. Ist die Platte zu
@@ -156,7 +218,7 @@ Auf dem Schreibtisch des Live-Systems liegt das Symbol **„System installieren"
 
 ---
 
-## 8. Häufige Fragen
+## 9. Häufige Fragen
 
 **Welche Auswahl soll ich nehmen?**  Im Zweifel die mittlere:
 **„System + meine Einstellungen"**. Sie ist voreingestellt, bleibt schlank und

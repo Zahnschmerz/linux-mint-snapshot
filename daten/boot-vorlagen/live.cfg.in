@@ -1,41 +1,45 @@
+# WICHTIG 1: Alle Texte REINES ASCII/ENGLISCH - das Boot-Menue kann keine Umlaute/Emoji.
+#            Deutsche Erklaerungen gehoeren in die App, nicht hierher.
+# WICHTIG 2: Empfohlener Persistenz-Eintrag = "persistence-read-only" (Aenderungen im RAM,
+#            einmal beim Herunterfahren gespeichert) - so macht es MX/antiX. Der DIREKT-
+#            Modus (nur "persistence") steht weiter unten: er schreibt jede Aenderung sofort
+#            auf den Stick und ist dort so langsam, dass systemd-Dienste ins 90-s-Limit
+#            laufen (Gilberts asus-Test 17.07.: dbus-Timeout, 14 Folgefehler, 4 Min Boot).
+#            Nur sinnvoll auf schneller USB-SSD.
+
 label live
-	menu label ${DISTRO} (Standard)
+	menu label ${DISTRO} (default)
     kernel /live/vmlinuz
     append initrd=/live/initrd.img boot=live ${ifnames_opt} ${netconfig_opt} username={LIVEUSER} locales={LOCALE} keyboard-layouts={KEYBOARD} timezone={TIMEZONE}
 
-label lang
-	menu label ${DISTRO} - English (US)
-    kernel /live/vmlinuz
-    append initrd=/live/initrd.img boot=live ${ifnames_opt} ${netconfig_opt} username={LIVEUSER} locales=en_US.UTF-8 keyboard-layouts=us
-
-label persist
-	menu label ${DISTRO} ⭐ mit Persistenz - deine Aenderungen bleiben / keep changes
-    kernel /live/vmlinuz
-    append initrd=/live/initrd.img boot=live persistence persistence-encryption=none ${ifnames_opt} ${netconfig_opt} username={LIVEUSER} locales={LOCALE} keyboard-layouts={KEYBOARD} timezone={TIMEZONE}
-
 label persistram
-	menu label ${DISTRO} mit Persistenz, Stick-schonend - speichert beim Ausschalten / saves on shutdown
+	menu label ${DISTRO} - with persistence, keep changes (RECOMMENDED - shut down properly!)
     kernel /live/vmlinuz
     append initrd=/live/initrd.img boot=live persistence persistence-encryption=none persistence-read-only ${ifnames_opt} ${netconfig_opt} username={LIVEUSER} locales={LOCALE} keyboard-layouts={KEYBOARD} timezone={TIMEZONE}
 
 label toram
-	menu label ${DISTRO} (ganz in den RAM laden - NUR wenn dein System kleiner als dein RAM ist!)
+	menu label ${DISTRO} - load all to RAM (only if system is smaller than your RAM!)
     kernel /live/vmlinuz
     append initrd=/live/initrd.img boot=live toram ${ifnames_opt} ${netconfig_opt} username={LIVEUSER} locales={LOCALE} keyboard-layouts={KEYBOARD} timezone={TIMEZONE}
 
+label persist
+	menu label ${DISTRO} - persistence written directly to stick (SLOW - only for fast USB-SSD)
+    kernel /live/vmlinuz
+    append initrd=/live/initrd.img boot=live persistence persistence-encryption=none ${ifnames_opt} ${netconfig_opt} username={LIVEUSER} locales={LOCALE} keyboard-layouts={KEYBOARD} timezone={TIMEZONE}
+
 label failsafe
-	menu label ${DISTRO} (failsafe/Notmodus)
+	menu label ${DISTRO} - failsafe
     kernel /live/vmlinuz noapic noapm nodma nomce nolapic nosmp forcepae nomodeset vga=normal ${ifnames_opt} ${netconfig_opt} username={LIVEUSER}
     append initrd=/live/initrd.img boot=live
 
 label memtest
-	menu label Speichertest (Memory test)
+	menu label Memory test
     kernel /live/memtest
 
 label chain.c32 hd0,0
-	menu label Festplatte starten (Boot hard disk)
+	menu label Boot hard disk
 	chain.c32 hd0,0
 
 label harddisk
-	menu label Festplatte starten (alter Weg)
+	menu label Boot hard disk (legacy)
 	localboot 0x80
