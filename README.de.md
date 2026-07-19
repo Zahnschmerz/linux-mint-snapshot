@@ -48,7 +48,7 @@ Fortgeschrittene können genau festlegen, welche Ordner weggelassen werden.
 
 **Am einfachsten — das .deb-Paket:** Lade `rikus-mintshot_*.deb` von der
 [Releases](https://github.com/Zahnschmerz/rikus-mintshot/releases)-Seite herunter und
-öffne es mit deiner Paketverwaltung (oder `sudo apt install ./rikus-mintshot_*.deb`).
+öffne es mit deiner Paketverwaltung (oder `sudo apt install ~/Downloads/rikus-mintshot_*.deb`).
 Danach **Rikus Mintshot** aus dem Anwendungsmenü starten.
 
 **Oder aus dem Quellcode:** `python3 rikus-mintshot.py` starten (oder doppelklicken und

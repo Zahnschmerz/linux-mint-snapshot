@@ -48,7 +48,7 @@ Advanced users can fine-tune exactly which folders to leave out.
 
 **Easiest — the .deb package:** download `rikus-mintshot_*.deb` from the
 [Releases](https://github.com/Zahnschmerz/rikus-mintshot/releases) page and open it
-with your package installer (or run `sudo apt install ./rikus-mintshot_*.deb`).
+with your package installer (or run `sudo apt install ~/Downloads/rikus-mintshot_*.deb`).
 Then start **Rikus Mintshot** from your applications menu.
 
 **Or from source:** run `python3 rikus-mintshot.py` (or double-click it in your file

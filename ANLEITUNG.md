@@ -32,7 +32,10 @@ funktioniert alles wie gewohnt, ohne dass du etwas neu einrichten musst.
 1. Lade `rikus-mintshot_*.deb` von der
    [Releases-Seite](https://github.com/Zahnschmerz/rikus-mintshot/releases) herunter.
 2. Doppelklick auf die Datei → deine Paketverwaltung öffnet sich → **„Installieren"**.
-   *(Oder im Terminal: `sudo apt install ./rikus-mintshot_*.deb`)*
+   *(Oder im Terminal: `sudo apt install ~/Downloads/rikus-mintshot_*.deb`)*
+
+   💡 **Tipp:** Liegt die Datei woanders? Dann im Download-Ordner **Rechtsklick →
+   „Im Terminal öffnen"** — dort bist du automatisch am richtigen Ort.
 3. Danach findest du **Rikus Mintshot** dauerhaft im **Startmenü**
    (mit eigenem Kamera-Symbol).
 
