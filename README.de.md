@@ -57,6 +57,7 @@ Danach **Rikus Mintshot** aus dem Anwendungsmenü starten.
 zu installieren — eine Passwort-Abfrage, ein paar Minuten.
 
 Ausführliche Schritt-für-Schritt-Anleitung: **[ANLEITUNG.md](ANLEITUNG.md)** (Deutsch) / **[GUIDE.md](GUIDE.md)** (English).
+Was sich in jeder Fassung geändert hat: **[CHANGELOG.md](CHANGELOG.md)**.
 
 ## Unter der Haube & Danksagung
 

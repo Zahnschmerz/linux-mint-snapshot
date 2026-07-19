@@ -57,6 +57,7 @@ manager and choose "Run"). On first start the app checks what's missing (mainly 
 it — one password prompt, a few minutes.
 
 Full step-by-step instructions: **[GUIDE.md](GUIDE.md)** (English) / **[ANLEITUNG.md](ANLEITUNG.md)** (Deutsch).
+What changed in each release: **[CHANGELOG.md](CHANGELOG.md)**.
 
 ## Under the hood & credits
 
