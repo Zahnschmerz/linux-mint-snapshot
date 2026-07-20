@@ -36,6 +36,11 @@ nothing needs to be set up again.
 
    💡 **Tip:** File somewhere else? In that folder use **right-click →
    "Open in Terminal"** — that puts you in the right place automatically.
+
+   🔒 **Verify the file (optional):** in the download folder use **right-click →
+   "Open in Terminal"**, then type `sha256sum rikus-mintshot_*.deb`. The long number
+   shown must match the one on the [releases page](https://github.com/Zahnschmerz/rikus-mintshot/releases)
+   (and on the website) — then the file is genuine and intact. You only need **this one file**.
 3. Afterwards you'll find **Rikus Mintshot** in your **application menu**
    (with its own camera icon).
 

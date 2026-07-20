@@ -36,6 +36,12 @@ funktioniert alles wie gewohnt, ohne dass du etwas neu einrichten musst.
 
    💡 **Tipp:** Liegt die Datei woanders? Dann im Download-Ordner **Rechtsklick →
    „Im Terminal öffnen"** — dort bist du automatisch am richtigen Ort.
+
+   🔒 **Datei prüfen (freiwillig):** Im Download-Ordner **Rechtsklick → „Im Terminal
+   öffnen"**, dann tippe `sha256sum rikus-mintshot_*.deb`. Die lange Zahl, die erscheint,
+   muss mit der auf der [Releases-Seite](https://github.com/Zahnschmerz/rikus-mintshot/releases)
+   (und auf der Webseite) übereinstimmen — dann ist die Datei echt und unbeschädigt.
+   Du brauchst dafür **nur diese eine Datei**.
 3. Danach findest du **Rikus Mintshot** dauerhaft im **Startmenü**
    (mit eigenem Kamera-Symbol).
 

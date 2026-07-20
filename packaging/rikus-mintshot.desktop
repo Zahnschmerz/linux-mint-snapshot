@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Rikus Mintshot
+Comment=1:1 clone of your system as a bootable ISO / 1:1-Klon deines Systems als startfähige ISO
+Comment[de]=1:1-Klon deines Linux-Mint-Systems als startfähige ISO — mit einem Klick
+Exec=python3 -B /opt/rikus-mintshot/rikus-mintshot.py
+Icon=/opt/rikus-mintshot/daten/icon.png
+Terminal=false
+Categories=System;Utility;
+Keywords=snapshot;iso;backup;live;usb;clone;sicherung;abbild;klon;

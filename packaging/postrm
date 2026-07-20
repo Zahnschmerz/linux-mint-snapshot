@@ -1,0 +1,34 @@
+#!/bin/bash
+set -u
+case "${1:-}" in
+  remove|purge)
+    # Von der Ersteinrichtung installierte Autostart-Dienste sauber abschalten und entfernen
+    for d in rikus-mintshot-netzfix rikus-mintshot-bootorder rikus-mintshot-persist-save; do
+      systemctl disable --now "$d.service" >/dev/null 2>&1 || true
+      rm -f "/etc/systemd/system/$d.service" \
+            "/etc/systemd/system/multi-user.target.wants/$d.service"
+    done
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    # Von der Ersteinrichtung installierte Hilfsskripte
+    rm -f /usr/local/sbin/rikus-mintshot-netzfix \
+          /usr/local/sbin/rikus-mintshot-dualboot \
+          /usr/local/sbin/rikus-mintshot-bootorder \
+          /usr/local/sbin/rikus-mintshot-persist-save \
+          /usr/local/sbin/rikus-mintshot-home-fix
+    # Calamares-/Live-Reste (wie bisher)
+    rm -rf /etc/calamares
+    rm -f /usr/lib/live/config/0029-live-user-anlegen \
+          /usr/lib/live/config/2000-installer-desktop-icon \
+          /etc/skel/Desktop/system-installieren.desktop \
+          /usr/local/share/applications/calamares.desktop
+    # Programmordner-Reste (z. B. __pycache__), die durchs Ausfuehren entstanden
+    rm -rf /opt/rikus-mintshot
+    update-desktop-database -q /usr/share/applications 2>/dev/null || true
+    ;;
+esac
+# Nur beim vollstaendigen Entfernen (purge): die WLAN-/LAN-Sicherung enthaelt
+# Zugangsdaten im Klartext -> restlos entfernen.
+if [ "${1:-}" = "purge" ]; then
+  rm -rf /usr/local/share/rikus-mintshot
+fi
+exit 0

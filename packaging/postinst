@@ -1,0 +1,34 @@
+#!/bin/bash
+# Rikus Mintshot -- post-install: copies the bundled Calamares/live-boot
+# configuration into place (pure file ops, no package management here --
+# calling dpkg/apt would deadlock against the outer install lock).
+set -u
+DATEN=/opt/rikus-mintshot/daten
+
+[ -f /etc/refractasnapshot.conf ] || cp "$DATEN/refractasnapshot.conf.vorlage" /etc/refractasnapshot.conf
+
+rm -rf /etc/calamares
+mkdir -p /etc/calamares
+cp -r "$DATEN/calamares/." /etc/calamares/
+
+install -m 0755 "$DATEN/live-hooks/0029-live-user-anlegen" /usr/lib/live/config/
+install -m 0755 "$DATEN/live-hooks/2000-installer-desktop-icon" /usr/lib/live/config/
+mkdir -p /etc/skel/Desktop
+install -m 0755 "$DATEN/desktop/system-installieren.desktop" /etc/skel/Desktop/
+
+# Home-repair helper for the "system only / system + settings" modes:
+# Calamares copies the squashfs, which may lack /home/<user>; this recreates
+# a missing home from /etc/skel on install (otherwise the login loops).
+mkdir -p /usr/local/sbin
+install -m 0755 "$DATEN/scripts/rikus-mintshot-home-fix" /usr/local/sbin/
+
+# Hide the raw Calamares menu entry (the live-desktop icon is the way in).
+if [ -f /usr/share/applications/calamares.desktop ]; then
+  mkdir -p /usr/local/share/applications
+  cp /usr/share/applications/calamares.desktop /usr/local/share/applications/calamares.desktop
+  grep -q '^NoDisplay=true' /usr/local/share/applications/calamares.desktop || \
+    echo 'NoDisplay=true' >> /usr/local/share/applications/calamares.desktop
+fi
+
+update-desktop-database -q /usr/share/applications 2>/dev/null || true
+exit 0

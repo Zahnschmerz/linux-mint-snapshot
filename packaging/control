@@ -1,0 +1,28 @@
+Package: rikus-mintshot
+Version: 6.9
+Architecture: all
+Maintainer: Gilbert Rikus <gilbert@rikus.info>
+Section: utils
+Priority: optional
+Replaces: linux-mint-snapshot
+Provides: linux-mint-snapshot
+Conflicts: linux-mint-snapshot
+Depends: python3, python3-gi, gir1.2-gtk-3.0, polkitd, pkexec, calamares, live-boot, live-config-systemd, live-boot-initramfs-tools, xorriso, isolinux, syslinux-common, squashfs-tools, grub-efi-amd64-bin, grub-pc-bin, shim-signed, grub-efi-amd64-signed, mtools, dosfstools, gdisk, parted, e2fsprogs, rsync, procps, x11-xserver-utils, os-prober, efibootmgr, wget
+Recommends: mintstick
+Homepage: https://github.com/Zahnschmerz/rikus-mintshot
+Description: One-click bootable clone of your running Linux Mint system
+ Rikus Mintshot builds a bootable live ISO of your running Linux Mint
+ installation with one click. Choose what goes in: bare system only,
+ system plus your settings (lean but ready to use), or a full 1:1 clone
+ including all your data. A system-cloning tool that Linux Mint has no
+ built-in equivalent for.
+ .
+ It uses the refractasnapshot engine and a custom-configured Calamares
+ installer for a full takeover on install (account, settings and logins
+ come straight from the clone). Boots with Secure Boot on or off (signed
+ shim + GRUB chain). GUI in German or English, chosen automatically.
+ Free and open source (GPL-3.0).
+ .
+ This package installs the application and its data files and pulls in
+ the required build/live/install tooling. The off-repository
+ refractasnapshot-base engine is fetched automatically on first run.

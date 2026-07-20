@@ -51,6 +51,11 @@ Fortgeschrittene können genau festlegen, welche Ordner weggelassen werden.
 öffne es mit deiner Paketverwaltung (oder `sudo apt install ~/Downloads/rikus-mintshot_*.deb`).
 Danach **Rikus Mintshot** aus dem Anwendungsmenü starten.
 
+> 🔒 **Datei prüfen (freiwillig):** Rechtsklick auf den Download-Ordner → „Im Terminal
+> öffnen", dann `sha256sum rikus-mintshot_*.deb`. Die angezeigte Zahl muss mit der auf der
+> [Releases](https://github.com/Zahnschmerz/rikus-mintshot/releases)-Seite übereinstimmen —
+> nur **eine** Datei nötig, kein zweiter Download.
+
 **Oder aus dem Quellcode:** `python3 rikus-mintshot.py` starten (oder doppelklicken und
 „Ausführen" wählen). Beim ersten Start prüft die App, was fehlt (vor allem der
 `refractasnapshot`-Motor, der nicht in Mints Standard-Quellen ist) und bietet an, es
