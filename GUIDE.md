@@ -246,6 +246,30 @@ The live desktop shows the icon **"Install System"**:
 
 ## 9. FAQ
 
+### The „🔔 Version X is available" line
+
+From version 6.11 on, the program checks once at startup whether a newer version
+exists. If so, a small green line with a link to the download page appears below the
+title. **That is all it does** — nothing is downloaded and nothing is installed.
+Without internet the line simply does not appear; the window opens instantly as usual.
+
+**Why this exists:** The program is shipped as a `.deb` via GitHub, so it is *not* an
+apt source. `apt update` never learns about newer versions — without this hint you
+would silently stay on an old release.
+
+**Turn it off** — a single line in a terminal:
+
+```
+touch ~/.config/rikus-mintshot/kein-update-hinweis
+```
+
+The program then stops asking altogether. To turn it back on:
+
+```
+rm ~/.config/rikus-mintshot/kein-update-hinweis
+```
+
+
 **Which option should I pick?**  When in doubt, the middle one:
 **"System + my settings"**. It's preselected, stays lean and is still ready to
 use — everything set up the way you know it.

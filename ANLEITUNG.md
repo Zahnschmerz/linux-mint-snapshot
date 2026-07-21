@@ -256,6 +256,31 @@ Auf dem Schreibtisch des Live-Systems liegt das Symbol **„System installieren"
 
 ## 9. Häufige Fragen
 
+### Der Hinweis „🔔 Version X ist verfügbar"
+
+Ab Fassung 6.11 schaut das Programm beim Start einmal nach, ob es eine neuere Fassung
+gibt. Wenn ja, erscheint unter dem Titel eine kleine grüne Zeile mit einem Link zur
+Download-Seite. **Mehr passiert nicht** — es wird nichts heruntergeladen und nichts
+installiert. Ohne Internet erscheint die Zeile einfach nicht; das Fenster geht wie
+gewohnt sofort auf.
+
+**Warum es das gibt:** Das Programm kommt als `.deb` von GitHub und ist damit *keine*
+apt-Quelle. `apt update` erfährt also nie davon, dass es etwas Neueres gibt — man
+bliebe ohne Hinweis auf einer alten Fassung sitzen, ohne es zu merken.
+
+**Abschalten** — eine einzige Zeile im Terminal:
+
+```
+touch ~/.config/rikus-mintshot/kein-update-hinweis
+```
+
+Danach fragt das Programm gar nicht mehr nach. Wieder einschalten:
+
+```
+rm ~/.config/rikus-mintshot/kein-update-hinweis
+```
+
+
 **Welche Auswahl soll ich nehmen?**  Im Zweifel die mittlere:
 **„System + meine Einstellungen"**. Sie ist voreingestellt, bleibt schlank und
 ist trotzdem sofort brauchbar — alles ist eingerichtet wie gewohnt.

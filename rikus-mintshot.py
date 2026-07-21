@@ -33,7 +33,7 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, GLib, Pango, GdkPixbuf
 
-VERSION = "6.10"
+VERSION = "6.11"
 APP_ORDNER = os.path.dirname(os.path.abspath(__file__))
 SYSTEM_ORDNER = '/opt/rikus-mintshot'
 DATEN = os.path.join(APP_ORDNER, 'daten')
@@ -65,6 +65,57 @@ def ablage_ordner(basis=None):
     """(iso_ordner, work_ordner) fuer eine gegebene oder die gespeicherte Basis."""
     b = basis or ablage_basis()
     return os.path.join(b, 'snapshot'), os.path.join(b, 'work')
+
+
+# ======================= Update-Hinweis =======================
+# Das Programm wird als .deb ueber GitHub verteilt und hat KEINE apt-Quelle.
+# "apt update" erfaehrt also nie davon, dass es eine neuere Fassung gibt - der
+# Nutzer bleibt sitzen, ohne es zu merken. Belegt im eigenen Projekt: Hans-Josef
+# Rausch testete v6.7 und meldete Fehler, als v6.8 laengst draussen war.
+#
+# Deshalb: eine unaufdringliche Zeile im Fenster. KEIN Popup, KEINE automatische
+# Installation - nur ein Hinweis mit Link.
+#
+# Grundregeln, die hier nicht verhandelbar sind:
+#   * Das Fenster darf NIE warten -> eigener Faden + hartes Zeitlimit.
+#   * Es darf NIE abstuerzen -> schlaegt etwas fehl, bleibt die Zeile einfach weg.
+#   * KEINE neue Abhaengigkeit -> urllib steckt in python3 (kein curl, kein requests).
+#   * Abschaltbar -> wer nicht will, dass das Programm nach aussen telefoniert,
+#     legt die Datei KEIN_UPDATE_DATEI an (steht in beiden Anleitungen).
+UPDATE_API = 'https://api.github.com/repos/Zahnschmerz/rikus-mintshot/releases/latest'
+UPDATE_SEITE = 'https://github.com/Zahnschmerz/rikus-mintshot/releases/latest'
+KEIN_UPDATE_DATEI = os.path.join(KONFIG_ORDNER, 'kein-update-hinweis')
+UPDATE_ZEITLIMIT = 4          # Sekunden; danach still aufgeben
+
+
+def version_tupel(text):
+    """'v6.10' -> (6, 10). Fuer den VERGLEICH von Versionen.
+
+    ⚠️ Versionen NIEMALS als Text vergleichen: "6.10" < "6.9" ist als Text WAHR,
+    der Hinweis bliebe ab 6.10 fuer immer aus. Zahlen vergleichen, nicht Buchstaben.
+    """
+    return tuple(int(t) for t in re.findall(r'\d+', text or '')) or (0,)
+
+
+def neuere_version():
+    """Fragt GitHub nach der neuesten Fassung. Rueckgabe: '6.11' oder None.
+
+    None heisst schlicht "kein Hinweis anzeigen" - egal ob es keine neuere Fassung
+    gibt, das Netz fehlt, GitHub bockt oder der Nutzer es abgeschaltet hat. Kein
+    Internet ist der NORMALFALL, kein Fehler.
+    """
+    if os.path.exists(KEIN_UPDATE_DATEI):
+        return None
+    try:
+        import urllib.request
+        with urllib.request.urlopen(UPDATE_API, timeout=UPDATE_ZEITLIMIT) as antwort:
+            tag = json.loads(antwort.read().decode('utf-8')).get('tag_name', '')
+        neu = version_tupel(tag)
+        if neu > version_tupel(VERSION):
+            return tag.lstrip('vV') or tag
+    except Exception:
+        pass                  # bewusst ALLES abfangen: ein Hinweis darf nie stoeren
+    return None
 REFRACTA_DEB_URL = ('https://master.dl.sourceforge.net/project/refracta/tools/'
                     'refractasnapshot-base_10.2.12_all.deb?viasf=1')
 CALA_MARKER = 'lms-config-v5'
@@ -102,6 +153,8 @@ T_ALLE = {
   'untertitel': "1:1-Klon deines Linux-Mint-Systems als startfähige ISO — mit einem Klick",
   'herausgeber': "Herausgeber: Gilbert Rikus · GPL-3 · v{v}",
   'knopf_ueber': "ℹ️ Über",
+  'update_da': "🔔 Version {v} ist verfügbar",
+  'update_link': "ansehen",
   'frame_auswahl': " Was kommt in den Schnappschuss? ",
   'klon_info': "Wähle, was in den Schnappschuss kommt:",
   'home_ohne': "Nur System (root) — ganz nackt, ohne persönliche Einstellungen",
@@ -204,6 +257,8 @@ T_ALLE = {
  'en': {
   'untertitel': "1:1 clone of your Linux Mint system as a bootable ISO — one click",
   'herausgeber': "Published by Gilbert Rikus · GPL-3 · v{v}",
+  'update_da': "🔔 Version {v} is available",
+  'update_link': "view",
   'knopf_ueber': "ℹ️ About",
   'frame_auswahl': " What goes into the snapshot? ",
   'klon_info': "Choose what goes into the snapshot:",
@@ -1097,6 +1152,14 @@ class SnapshotApp(Gtk.Window):
         titel_zeile.pack_start(self.knopf_ueber, False, False, 0)
         haupt.pack_start(titel_zeile, False, False, 0)
 
+        # Update-Hinweis: bleibt UNSICHTBAR, solange nichts Neues da ist.
+        # set_no_show_all verhindert, dass das spaetere show_all() ihn doch einblendet.
+        self.update_label = Gtk.Label()
+        self.update_label.set_no_show_all(True)
+        self.update_label.set_justify(Gtk.Justification.CENTER)
+        haupt.pack_start(self.update_label, False, False, 0)
+        threading.Thread(target=self._update_pruefen, daemon=True).start()
+
         info_zeile = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         self.info_label = Gtk.Label()
         self.info_label.set_halign(Gtk.Align.START)
@@ -1520,6 +1583,36 @@ class SnapshotApp(Gtk.Window):
             GLib.idle_add(lambda: (self.knopf_einrichten.set_sensitive(True), False)[1])
 
     # ================= ISO bauen =================
+
+    def _update_pruefen(self):
+        """Laeuft im EIGENEN Faden, damit das Fenster nie auf das Netz wartet.
+
+        Das Ergebnis darf nicht von hier aus in die Oberflaeche geschrieben werden -
+        GTK vertraegt keine Zugriffe aus fremden Faeden. Deshalb der Rueckweg ueber
+        GLib.idle_add, das die Anzeige im Oberflaechen-Faden erledigt.
+        """
+        try:
+            neu = neuere_version()
+            if neu:
+                GLib.idle_add(self._update_zeigen, neu)
+        except Exception:
+            pass                  # ein Hinweis darf das Programm niemals stoeren
+
+    def _update_zeigen(self, neu):
+        """Blendet die Hinweiszeile ein. Laeuft im Oberflaechen-Faden (via idle_add)."""
+        try:
+            # ⚠️ Die Versionsnummer kommt AUS DEM INTERNET und landet in set_markup.
+            # Ein "&" darin macht ohne Absicherung die GANZE Zeile unsichtbar - ohne
+            # jede Fehlermeldung. Genau dieser Fehler steckte bis 6.10 in der Ablage-Zeile.
+            text = GLib.markup_escape_text(T['update_da'].format(v=neu))
+            link = GLib.markup_escape_text(T['update_link'])
+            self.update_label.set_markup(
+                f"<span size='small' foreground='#2e7d32'>{text} — "
+                f"<a href='{GLib.markup_escape_text(UPDATE_SEITE)}'>{link}</a></span>")
+            self.update_label.show()
+        except Exception:
+            pass
+        return False              # idle_add: nur einmal ausfuehren
 
     def _ablage_bereitstellen(self):
         """Ablageordner anlegen und beschreibbar machen. Rueckgabe: True = der Bau kann starten.

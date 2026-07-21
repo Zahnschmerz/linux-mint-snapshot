@@ -5,6 +5,24 @@ All releases of Rikus Mintshot, newest first.
 
 ---
 
+## 6.11 — 21. Juli 2026
+
+**🇩🇪 Das Programm sagt jetzt Bescheid, wenn es eine neuere Fassung gibt.**
+
+- **Neu: Update-Hinweis.** Beim Start schaut das Programm einmal nach, ob auf GitHub eine neuere Fassung liegt. Wenn ja, erscheint unter dem Titel eine kleine grüne Zeile: „🔔 Version X ist verfügbar — ansehen", mit Link zur Download-Seite. **Es wird nichts heruntergeladen und nichts installiert** — nur der Hinweis.
+- **Warum das nötig war:** Das Programm kommt als `.deb` über GitHub und ist damit *keine* apt-Quelle. `apt update` erfährt also nie von einer neuen Fassung. Wie sehr das fehlt, zeigte ein Tester, der Fehler zu Fassung 6.7 meldete, als 6.8 längst veröffentlicht war.
+- **Was der Hinweis NICHT tut:** Er hält das Fenster nicht auf (eigener Hintergrund-Vorgang mit 4-Sekunden-Grenze — gemessen: das Fenster stand nach 450 ms, während die Abfrage noch ins Leere lief). Er stürzt nicht ab (schlägt etwas fehl, bleibt die Zeile einfach weg). Er braucht **kein zusätzliches Paket**. Und ohne Internet erscheint er gar nicht — das ist der Normalfall, kein Fehler.
+- **Abschaltbar:** `touch ~/.config/rikus-mintshot/kein-update-hinweis` — dann fragt das Programm gar nicht mehr nach. Steht in beiden Anleitungen.
+
+**🇬🇧 The program now tells you when a newer version is out.**
+
+- **New: update hint.** At startup the program checks once whether a newer release exists on GitHub. If so, a small green line appears below the title: „🔔 Version X is available — view", linking to the download page. **Nothing is downloaded and nothing is installed.**
+- **Why:** The program ships as a `.deb` via GitHub and is therefore *not* an apt source, so `apt update` never learns about newer versions. A tester reported bugs against 6.7 while 6.8 had long been released.
+- **What it does not do:** It never blocks the window (background check with a 4-second limit — measured: window up after 450 ms while the request was still running into nothing), it never crashes (on any failure the line simply stays hidden), and it needs **no extra package**. Without internet it does not appear at all.
+- **Can be switched off:** `touch ~/.config/rikus-mintshot/kein-update-hinweis`. Documented in both guides.
+
+---
+
 ## 6.10 — 21. Juli 2026
 
 **🇩🇪 Bei Ordnernamen mit `&` blieb die Ablage-Zeile leer.**
