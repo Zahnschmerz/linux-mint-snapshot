@@ -5,6 +5,22 @@ All releases of Rikus Mintshot, newest first.
 
 ---
 
+## 7.1 — 23. Juli 2026
+
+**🇩🇪 Persistenz ließ sich auf vielen Sticks nicht einrichten („Invalid partition data!").**
+
+- **Behoben: „💾 Persistenz einrichten" brach mit „Invalid partition data!" ab.** Zum Anlegen der Persistenz-Kiste benutzte das Programm ein Werkzeug (`sgdisk`), das nur mit **einer** Sorte Partitionstabelle umgehen kann („GPT"). Sticks, die mit Linux Mints eigenem USB-Stick-Ersteller beschrieben wurden, haben aber die **andere** Sorte („MBR") — dort verweigerte das Werkzeug die Arbeit, und es entstand keine Persistenz. Ob der Fehler auftrat, hing davon ab, **womit** der Stick beschrieben wurde, was ihn schwer greifbar machte.
+  Jetzt erkennt das Programm, welche Sorte der Stick hat, und nimmt für jede das passende Werkzeug. **Beide Fälle sind an nachgebauten Sticks geprüft:** Die Persistenz-Partition entsteht im freien Platz hinter der ISO, die ISO selbst bleibt unangetastet.
+- **Eine Abhängigkeit kam dazu: `fdisk`** — daraus stammt das Werkzeug (`sfdisk`), das die Kiste auf MBR-Sticks anlegt. Auf Linux Mint ist es ohnehin vorhanden; auf einem abgespeckten System wird es jetzt sauber mitinstalliert, statt dass die Persistenz-Einrichtung dort still nichts täte.
+
+**🇬🇧 Persistence could not be set up on many sticks ("Invalid partition data!").**
+
+- **Fixed: "💾 Set up persistence" aborted with "Invalid partition data!".** To create the persistence box, the program used a tool (`sgdisk`) that only handles **one** kind of partition table ("GPT"). Sticks written with Linux Mint's own USB stick writer have the **other** kind ("MBR"), where the tool refused to work and no persistence was created. Whether the error appeared depended on **how** the stick was written, which made it hard to pin down.
+  The program now detects which kind the stick has and uses the matching tool for each. **Both cases are verified on rebuilt sticks:** the persistence partition is created in the free space behind the ISO, leaving the ISO itself untouched.
+- **One dependency was added: `fdisk`** — it provides the tool (`sfdisk`) that creates the box on MBR sticks. Always present on Linux Mint anyway; on a slim system it is now pulled in properly instead of persistence setup silently doing nothing.
+
+---
+
 ## 7.0 — 21. Juli 2026
 
 **🇩🇪 Nach dem Wiederherstellen war der Fernzugang (SSH) still tot.**

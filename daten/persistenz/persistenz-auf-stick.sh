@@ -47,12 +47,30 @@ if [ -n "$EXIST" ]; then
   echo "FEHLER: Kiste $EXIST ist vorhanden, laesst sich aber nicht einbinden."; exit 1
 fi
 
-# --- GPT-Backup ans Ende schieben (macht den freien Platz nutzbar) ---
-sgdisk -e "$DEV" >/dev/null 2>&1 || true
-
-# --- neue Partition anlegen (im freien Platz, Name+Typ Linux) ---
-if [ "$GROESSE" -gt 0 ] 2>/dev/null; then ENDE="+${GROESSE}M"; else ENDE="0"; fi
-sgdisk -n "0:0:${ENDE}" -t 0:8300 -c 0:persistence "$DEV" >/dev/null
+# --- neue Partition im freien Platz anlegen — je nach Partitionstabelle des Sticks ---
+# Der Stick kann ZWEIERLEI Tabelle tragen, je nachdem, WOMIT die ISO geschrieben wurde:
+#   * GPT  — z. B. wenn die ISO 1:1 mit `dd` kopiert wurde
+#   * MBR/dos — so schreibt Linux Mints eigener USB-Stick-Ersteller die isohybrid-ISO
+# `sgdisk` beherrscht NUR GPT; auf einem MBR-Stick bricht es mit "Invalid partition data!"
+# ab (die ISO-Tabelle hat ueberlappende Eintraege + GPT-Reste). Darum: Tabelle erkennen
+# und das passende Werkzeug nehmen.
+PTTYPE=$(blkid -o value -s PTTYPE "$DEV" 2>/dev/null)
+if [ "$PTTYPE" = "gpt" ]; then
+  # GPT: Backup ans Ende schieben, dann neue Partition (Typ 8300 = Linux)
+  sgdisk -e "$DEV" >/dev/null 2>&1 || true
+  if [ "$GROESSE" -gt 0 ] 2>/dev/null; then ENDE="+${GROESSE}M"; else ENDE="0"; fi
+  sgdisk -n "0:0:${ENDE}" -t 0:8300 -c 0:persistence "$DEV" >/dev/null
+else
+  # MBR/dos (Standard-Fall bei Mints USB-Stick-Ersteller): `sfdisk --append` haengt eine
+  # neue Primaer-Partition im freien Platz HINTER der ISO an, ohne die vorhandenen
+  # ISO-/EFI-Eintraege anzutasten. Typ 83 = Linux. Der Start wird explizit ans Ende der
+  # letzten belegten Partition gesetzt (ausgerichtet), damit sie zuverlaessig im grossen
+  # freien Bereich landet und nicht im winzigen Rest vor der ISO.
+  LAST_END=$(sfdisk -d "$DEV" 2>/dev/null | awk -F'[ =,]+' '/start=/{s=0;sz=0; for(i=1;i<=NF;i++){if($i=="start")s=$(i+1); if($i=="size")sz=$(i+1)} if(s+sz>m)m=s+sz} END{print m}')
+  START=$(( ((LAST_END + 2047) / 2048) * 2048 ))   # auf 1-MiB-Grenze aufrunden
+  if [ "$GROESSE" -gt 0 ] 2>/dev/null; then SZ=",size=$((GROESSE*2048))"; else SZ=""; fi
+  printf 'start=%s%s, type=83\n' "$START" "$SZ" | sfdisk --append --force "$DEV" >/dev/null
+fi
 partprobe "$DEV" 2>/dev/null || true
 udevadm settle 2>/dev/null || true
 

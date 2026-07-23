@@ -33,7 +33,7 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, GLib, Pango, GdkPixbuf
 
-VERSION = "7.0"
+VERSION = "7.1"
 APP_ORDNER = os.path.dirname(os.path.abspath(__file__))
 SYSTEM_ORDNER = '/opt/rikus-mintshot'
 DATEN = os.path.join(APP_ORDNER, 'daten')
